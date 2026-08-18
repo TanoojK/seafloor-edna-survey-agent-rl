@@ -1,0 +1,22 @@
+# Virtual environment
+venv/
+underwater_rl/
+
+# Editor config
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
+
+# Training outputs (large binary files -- don't belong in git)
+scripts/checkpoints/
+scripts/checkpoints_fast_test/
+*.pt
+
+# Visualization outputs (regenerable, and GIFs/PNGs bloat repo size fast)
+scripts/rollout_viz/
+
+# OS junk
+.DS_Store
+Thumbs.db

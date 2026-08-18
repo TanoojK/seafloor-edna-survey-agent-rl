@@ -1,0 +1,7 @@
+torch
+numpy
+gymnasium
+perlin-noise
+matplotlib
+seaborn
+Pillow
