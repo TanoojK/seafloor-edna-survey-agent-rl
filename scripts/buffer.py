@@ -62,13 +62,20 @@ class RolloutBuffer:
         returns = advantages + values[:-1]
         return advantages, returns
 
-    def get_tensors(self, device):
-        maps = torch.stack(self.maps).to(device)
-        scalars = torch.stack(self.scalars).to(device)
-        actions = torch.stack(self.actions).to(device)
-        old_log_probs = torch.stack(self.log_probs).to(device)
+    def get_tensors(self):
+        """Returns CPU tensors -- deliberately NOT moved to GPU here. The full
+        buffer (especially with multiple parallel environments) can be far
+        larger than any single minibatch actually needs on the GPU at once
+        (e.g. 8 envs x 2048 steps = 16,384 samples resident simultaneously,
+        vs. the ~64 actually used per forward/backward pass) -- on a memory-
+        constrained GPU this alone can cause an out-of-memory error. Moving
+        data to the GPU is now the caller's job, done per-minibatch instead."""
+        maps = torch.stack(self.maps)
+        scalars = torch.stack(self.scalars)
+        actions = torch.stack(self.actions)
+        old_log_probs = torch.stack(self.log_probs)
         if self.action_masks and self.action_masks[0] is not None:
-            action_masks = torch.stack(self.action_masks).to(device)
+            action_masks = torch.stack(self.action_masks)
         else:
             action_masks = None
         return maps, scalars, actions, old_log_probs, action_masks
