@@ -16,6 +16,8 @@ scripts/checkpoints_fast_test/
 
 # Visualization outputs (regenerable, and GIFs/PNGs bloat repo size fast)
 scripts/rollout_viz/
+visualizations/
+
 
 # OS junk
 .DS_Store
