@@ -33,13 +33,13 @@ import numpy as np
 # ---------------------------------------------------------------------- #
 # Config 
 # ---------------------------------------------------------------------- #
-N_ENVS = 8                   # parallel environments -- tune down if you hit
+N_ENVS = 8                     # parallel environments -- tune down if you hit
                                 # CPU core or VRAM limits; 8 is a reasonable
                                 # starting point for a modern multi-core CPU
                                 # + RTX 3050
 TOTAL_TIMESTEPS = 500_000      # per-environment; total env-steps collected
                                 # across all workers is N_ENVS times this
-ROLLOUT_LENGTH = 1024         # steps PER ENVIRONMENT collected before each
+ROLLOUT_LENGTH = 2048          # steps PER ENVIRONMENT collected before each
                                 # PPO update (so each update uses
                                 # ROLLOUT_LENGTH * N_ENVS transitions total)
 CHECKPOINT_EVERY = 100_000      # timesteps (per-env) between checkpoint saves
@@ -51,8 +51,16 @@ N_MAP_CHANNELS = 5             # elevation, eDNA field, vent mask, predator mask
 N_SCALARS = 6                  # agent_row, agent_col, energy, canisters, spawn_row, spawn_col
 
 ENTROPY_COEF_START = 0.03
-ENTROPY_COEF_END = 0.006       # was 0.003 -- raised slightly; entropy was crashing to
-                                # near-zero (0.1-0.6) even before reaching the old floor
+ENTROPY_COEF_END = 0.008       # was 0.015 -- that value was chosen to compensate for the
+                                # per-env timestep counting bug (schedules were racing 8x
+                                # too fast relative to real experience), which is now fixed
+                                # separately. With the schedule now correctly spanning the
+                                # true 500k per-env steps, and value_coef raised to 1.0
+                                # above (targeting what looks like the real cause -- a
+                                # noisy, unconverged critic giving weak advantage signal,
+                                # not too little exploration), a lower floor should let the
+                                # policy actually commit once the critic gives it something
+                                # real to commit to.
 LR_START = 3e-4
 LR_END = 3e-5                  # 10x decay over the run -- standard PPO practice, and the
                                 # volatility in value_loss across every run so far suggests
@@ -60,7 +68,10 @@ LR_END = 3e-5                  # 10x decay over the run -- standard PPO practice
                                 # ones, fighting against convergence
 CURRICULUM_START_DIST = 10.0
 CURRICULUM_END_DIST = None      # None = grows up to grid_size * 0.7
-CURRICULUM_END_FRACTION = 0.75
+CURRICULUM_END_FRACTION = 0.95   # was 0.75 -- regression consistently starts right as
+                                  # curriculum nears full difficulty; giving it more of
+                                  # the run at moderate difficulty before the hardest
+                                  # cases kick in should help consolidation
 
 # ---- fast-test mode: a shorter proxy run for quickly checking whether a
 # change helps, in minutes instead of the ~20+ min a full run takes. Bugs like
@@ -123,7 +134,7 @@ def train(fast_test: bool = False):
     print(f"Running {N_ENVS} parallel environments.")
     os.makedirs(checkpoint_dir, exist_ok=True)
 
-    vec_env = SubprocVecEnv(n_envs=N_ENVS, grid_size=grid_size, max_steps=500, gamma=0.99)
+    vec_env = SubprocVecEnv(n_envs=N_ENVS, grid_size=grid_size, max_steps=300, gamma=0.99)
     agent = PPOAgent(
         n_map_channels=N_MAP_CHANNELS,
         n_scalars=N_SCALARS,
@@ -147,7 +158,9 @@ def train(fast_test: bool = False):
     episode_samples_log = []               # samples collected per completed episode
 
     timesteps_done = 0
+    total_env_steps = 0
     episodes_done = 0
+    next_log_episode = LOG_EVERY_EPISODES
     start_time = time.time()
 
     metrics_log_path = os.path.join(checkpoint_dir, "metrics_log.csv")
@@ -172,7 +185,7 @@ def train(fast_test: bool = False):
                 curriculum_progress = min(progress_for_curriculum / CURRICULUM_END_FRACTION, 1.0)
                 if CURRICULUM_END_DIST is None:
                     curriculum_ceiling = CURRICULUM_START_DIST + curriculum_progress * (
-                        grid_size * 0.7 - CURRICULUM_START_DIST
+                        grid_size * 0.6 - CURRICULUM_START_DIST
                     )
                 else:
                     curriculum_ceiling = CURRICULUM_START_DIST + curriculum_progress * (
@@ -191,7 +204,6 @@ def train(fast_test: bool = False):
                         float(rewards[i]), bool(dones[i]), masks_t[i]
                     )
                     episode_rewards[i] += rewards[i]
-                    timesteps_done += 1
 
                     if dones[i]:
                         episode_rewards_log.append(episode_rewards[i])
@@ -200,17 +212,36 @@ def train(fast_test: bool = False):
                         episodes_done += 1
                         episode_rewards[i] = 0.0
 
-                        if episodes_done % LOG_EVERY_EPISODES == 0:
-                            recent = episode_rewards_log[-LOG_EVERY_EPISODES:]
-                            recent_reasons = episode_end_reasons[-LOG_EVERY_EPISODES:]
-                            recent_samples = episode_samples_log[-LOG_EVERY_EPISODES:]
-                            elapsed = time.time() - start_time
-                            print(f"[{timesteps_done:>8}/{total_timesteps}] "
-                                  f"episode {episodes_done:>5} | "
-                                  f"avg_reward(last {LOG_EVERY_EPISODES})={np.mean(recent):>7.2f} | "
-                                  f"avg_samples={np.mean(recent_samples):.2f} | "
-                                  f"reasons={_summarize_reasons(recent_reasons)} | "
-                                  f"elapsed={elapsed:.0f}s")
+                # timesteps_done is PER-ENVIRONMENT progress (matches TOTAL_TIMESTEPS'
+                # stated meaning, and is what every schedule below is based on) --
+                # incremented ONCE per rollout-step here, not once per environment.
+                # Incrementing it N_ENVS times per step (a bug in an earlier version)
+                # made every schedule (curriculum, entropy, LR) race through 8x faster
+                # than intended relative to how much any single environment had
+                # actually experienced -- the run would hit "500,000" and stop after
+                # only 500,000/N_ENVS real per-env steps, with curriculum/entropy already
+                # fully decayed at that point. total_env_steps (below) tracks the real
+                # combined count across all workers, for logging only -- never used
+                # for scheduling.
+                timesteps_done += 1
+                total_env_steps += N_ENVS
+
+                # use a milestone counter, not a modulo check -- multiple envs can
+                # finish an episode in the same step, so episodes_done can jump by
+                # more than 1 and skip past an exact multiple of LOG_EVERY_EPISODES
+                while episodes_done >= next_log_episode:
+                    recent = episode_rewards_log[-LOG_EVERY_EPISODES:]
+                    recent_reasons = episode_end_reasons[-LOG_EVERY_EPISODES:]
+                    recent_samples = episode_samples_log[-LOG_EVERY_EPISODES:]
+                    elapsed = time.time() - start_time
+                    print(f"[{timesteps_done:>8}/{total_timesteps} per-env, {total_env_steps} combined] "
+                          f"episode {episodes_done:>5} | "
+                          f"avg_reward(last {LOG_EVERY_EPISODES})={np.mean(recent):>7.2f} | "
+                          f"avg_samples={np.mean(recent_samples):.2f} | "
+                          f"reasons={_summarize_reasons(recent_reasons)} | "
+                          f"elapsed={elapsed:.0f}s")
+                    next_log_episode += LOG_EVERY_EPISODES
+
 
                 maps_t = torch.from_numpy(next_obs["maps"])
                 scalars_t = torch.from_numpy(next_obs["scalars"])
@@ -260,7 +291,7 @@ def train(fast_test: bool = False):
                 return
 
             # ---- periodic checkpoint ---- #
-            if timesteps_done % CHECKPOINT_EVERY < ROLLOUT_LENGTH * N_ENVS:
+            if timesteps_done % CHECKPOINT_EVERY < ROLLOUT_LENGTH:
                 ckpt_path = os.path.join(checkpoint_dir, f"ppo_step{timesteps_done}.pt")
                 torch.save(agent.model.state_dict(), ckpt_path)
                 print(f"  saved checkpoint: {ckpt_path}")

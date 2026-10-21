@@ -1,6 +1,6 @@
 # Virtual environment
 venv/
-underwater_rl/
+rl_env/
 
 # Editor config
 .vscode/

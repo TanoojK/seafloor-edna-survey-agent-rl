@@ -22,7 +22,7 @@ from buffer import RolloutBuffer
 class PPOAgent:
     def __init__(self, n_map_channels, n_scalars, n_actions=9, grid_size=50,
                  lr=3e-4, gamma=0.99, lam=0.95, clip_eps=0.2,
-                 value_coef=0.5, entropy_coef=0.03, n_epochs=4, batch_size=64,
+                 value_coef=1.0, entropy_coef=0.03, n_epochs=4, batch_size=256,
                  device=None):
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -133,7 +133,12 @@ class PPOAgent:
 
                 self.optimizer.zero_grad()
                 loss.backward()
-                nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=0.5)
+                actor_params = list(self.model.actor_encoder.parameters()) + \
+                    list(self.model.actor_trunk.parameters()) + list(self.model.actor_head.parameters())
+                critic_params = list(self.model.critic_encoder.parameters()) + \
+                    list(self.model.critic_trunk.parameters()) + list(self.model.critic_head.parameters())
+                nn.utils.clip_grad_norm_(actor_params, max_norm=0.5)
+                nn.utils.clip_grad_norm_(critic_params, max_norm=0.5)
                 self.optimizer.step()
 
                 stats["entropy"].append(entropy.mean().item())

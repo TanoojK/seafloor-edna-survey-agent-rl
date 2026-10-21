@@ -24,6 +24,11 @@ returned accurately, so the caller can correctly log that episode's outcome
 before the new one begins.
 """
 
+import os
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+
 import multiprocessing as mp
 import numpy as np
 
@@ -71,7 +76,7 @@ class SubprocVecEnv:
     """Manages N worker processes, each running one SeafloorEDNAEnv.
     All public methods operate on BATCHES across all N environments at once."""
 
-    def __init__(self, n_envs, grid_size=50, max_steps=500, gamma=0.99):
+    def __init__(self, n_envs, grid_size=50, max_steps=300, gamma=0.99):
         self.n_envs = n_envs
         self.grid_size = grid_size
 

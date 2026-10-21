@@ -87,7 +87,7 @@ def render_episode(ax,
 
 def visualize_one_episode(seed: int | None = None, 
                           grid_size: int = 50, 
-                          save_path: str = "../Images/Environment_check/latest_full_env_check.png"):
+                          save_path: str = "../visualizations/latest_episode.png"):
     """
     Visualizes a single generated episode.
     Pass seed=None (or omit it) for a fresh random episode each run.
