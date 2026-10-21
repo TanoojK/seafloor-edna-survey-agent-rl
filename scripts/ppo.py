@@ -121,12 +121,7 @@ class PPOAgent:
                 surr2 = torch.clamp(ratio, 1 - self.clip_eps, 1 + self.clip_eps) * advantages_b
                 policy_loss = -torch.min(surr1, surr2).mean()
 
-                values_clipped = old_values_b + torch.clamp(
-                    values - old_values_b, -self.clip_eps, self.clip_eps
-                )
-                value_loss_unclipped = (values - returns_b) ** 2
-                value_loss_clipped = (values_clipped - returns_b) ** 2
-                value_loss = 0.5 * torch.max(value_loss_unclipped, value_loss_clipped).mean()
+                value_loss = 0.5 * ((values - returns_b) ** 2).mean()
 
                 entropy_loss = -entropy.mean()
                 loss = policy_loss + self.value_coef * value_loss + self.entropy_coef * entropy_loss

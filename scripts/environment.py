@@ -194,8 +194,8 @@ class SeafloorEDNAEnv(gym.Env):
             if spawn is None:
                 continue
 
-            n_hotspots = int(self._rng.integers(*self.n_hotspots_range))
-            hotspots = place_edna_hotspots(impassable, spawn, n_hotspots=n_hotspots, rng=self._rng)
+            n_hotspots = int(self._rng.integers(self.n_hotspots_range[0], self.n_hotspots_range[1] + 1))
+            hotspots = place_edna_hotspots(impassable, spawn, n_hotspots=n_hotspots, max_dist_from_spawn=self.max_hotspot_dist, rng=self._rng)
             if hotspots is None or len(hotspots) == 0:
                 continue
 
@@ -279,12 +279,12 @@ class SeafloorEDNAEnv(gym.Env):
             info["end_reason"] = "max_steps"
 
         # -- potential-based distance shaping (dense signal toward nearest unsampled hotspot) --
-        new_potential = self._compute_potential()
+        new_potential = 0.0 if (terminated or truncated) else self._compute_potential()
         reward += self.gamma * new_potential - self._prev_potential
         self._prev_potential = new_potential
 
         # -- potential-based DANGER shaping (dense signal to steer away from vents) --
-        new_danger_potential = self._compute_danger_potential()
+        new_danger_potential = 0.0 if (terminated or truncated) else self._compute_danger_potential()
         reward += self.gamma * new_danger_potential - self._prev_danger_potential
         self._prev_danger_potential = new_danger_potential
 
