@@ -9,8 +9,7 @@ from hazards import place_vents, place_predator_zones
 def generate_full_episode(grid_size: int = 50, 
                           seed: int | None = None, 
                           n_hotspots_range=(3, 5)):
-    
-    """Runs the full generation pipeline for one episode and returns everything needed to render it."""
+
     rng = np.random.default_rng(seed)
 
     elevation = generate_terrain(grid_size=grid_size, seed=seed)
@@ -88,11 +87,7 @@ def render_episode(ax,
 def visualize_one_episode(seed: int | None = None, 
                           grid_size: int = 50, 
                           save_path: str = "../visualizations/latest_episode.png"):
-    """
-    Visualizes a single generated episode.
-    Pass seed=None (or omit it) for a fresh random episode each run.
-    Pass a specific integer seed to reproduce the same episode again.
-    """
+
     if seed is None:
         seed = int(np.random.default_rng().integers(0, 1_000_000))
 

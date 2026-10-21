@@ -1,29 +1,3 @@
-"""
-Runs N environment instances in parallel, each in its own OS process, following
-the same pattern as Stable-Baselines3's SubprocVecEnv.
-
-Each worker creates and owns exactly one SeafloorEDNAEnv instance for its entire
-lifetime -- it's never recreated, just repeatedly reset(). This matters for RNG
-behavior: each worker's env self-seeds from OS entropy once at construction
-(same as the existing single-environment design), and that RNG state naturally
-continues advancing across every reset() within that worker -- independent
-across workers since they're separate OS processes with independent entropy.
-
-IMPORTANT (Windows): multiprocessing on Windows uses the "spawn" start method,
-not "fork". This means: (1) the calling script MUST guard process creation with
-`if __name__ == "__main__":`, or spawn will recursively re-execute the whole
-module in every child process; (2) everything passed to Process(args=...) must
-be picklable -- we never pass an env instance itself, only plain ints/floats and
-multiprocessing.Pipe connection objects (which are spawn-safe), so this is fine.
-
-Auto-reset convention: when a worker's env reaches a terminal/truncated state,
-the worker immediately resets internally and returns the FRESH observation
-(matching the standard VecEnv convention) -- but the reward/terminated/
-truncated/info from the step that actually ended the episode are still
-returned accurately, so the caller can correctly log that episode's outcome
-before the new one begins.
-"""
-
 import os
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 os.environ.setdefault("MKL_NUM_THREADS", "1")
@@ -36,8 +10,7 @@ from environment import SeafloorEDNAEnv
 
 
 def _worker(remote, grid_size, max_steps, gamma):
-    """Runs in a child process. Owns one persistent env instance for its
-    entire lifetime. Communicates via a duplex Pipe connection."""
+
     env = SeafloorEDNAEnv(grid_size=grid_size, max_steps=max_steps, gamma=gamma)
     obs, info = env.reset()
 
@@ -73,8 +46,6 @@ def _worker(remote, grid_size, max_steps, gamma):
 
 
 class SubprocVecEnv:
-    """Manages N worker processes, each running one SeafloorEDNAEnv.
-    All public methods operate on BATCHES across all N environments at once."""
 
     def __init__(self, n_envs, grid_size=50, max_steps=300, gamma=0.99):
         self.n_envs = n_envs

@@ -1,21 +1,3 @@
-"""
-Corrected direct-path survivability test.
-
-The original version in the project notes walked in a straight line (sign of
-delta row/col) toward the nearest hotspot. That's not "the best a sensible
-policy could do" -- it gets stuck indefinitely against impassable terrain,
-which silently inflated the max_steps bucket and hid the true death rate.
-
-This version uses Dijkstra's algorithm to find the actual CHEAPEST path (by
-energy cost, matching the environment's real move costs -- cardinal=1.0,
-diagonal=1.5, plus a small elevation adjustment) from the agent's current cell
-to its target, avoiding impassable cells, and takes the first step of that
-path each turn. This is a step up from plain BFS (shortest path by tile
-count), which can pick a route that's fewer tiles but MORE energy, since
-diagonal moves cost more than cardinal ones. Recomputed every step since
-sampling can change the target.
-"""
-
 import heapq
 import numpy as np
 import sys
@@ -28,10 +10,7 @@ IS_DIAGONAL = [False, True, False, True, False, True, False, True]
 
 
 def dijkstra_next_step(start, target, blocked, elevation):
-    """Returns the first move (as an action index 0-7) along the CHEAPEST
-    (by energy cost, matching the real environment's move costs) 8-connected
-    path from start to target, avoiding any cell marked in `blocked`.
-    Returns None if unreachable."""
+
     if start == target:
         return None
     grid_size = blocked.shape[0]
@@ -69,13 +48,7 @@ def dijkstra_next_step(start, target, blocked, elevation):
 
 
 def direct_path_action(env):
-    """A 'sensible, near-optimal but simple' policy: routes around impassable
-    terrain AND around vents (certain death, and fully visible in the vent-mask
-    observation channel from step 1 -- any reasonable policy avoids what it can
-    see is lethal), using the actual cheapest-energy path (Dijkstra), not just
-    the fewest-tiles path. Predator zones are left walkable: the risk is small
-    per step (0.5%) and probabilistic, so accepting brief exposure while
-    passing through is a legitimate trade-off, not an oversight."""
+
     ar, ac = env.agent_pos
     unsampled = [h for h in env.hotspots if env.sampled_mask[h] == 0] if env.canisters > 0 else []
     target = env.spawn if not unsampled else min(

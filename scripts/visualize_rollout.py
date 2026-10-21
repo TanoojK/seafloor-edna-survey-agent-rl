@@ -1,33 +1,3 @@
-"""
-Visualizes a single episode (rollout) of the agent so training problems --
-reward hacking, hazard-avoidance failures, energy mismanagement, stuck/looping
-behavior, etc. -- are actually visible instead of inferred from aggregate stats.
-
-Produces two outputs per run:
-    1. A static trajectory plot: the full path overlaid on the terrain/hazard
-       map, colored by time (dark -> light = early -> late), with sample
-       events (green X) and the death/end location (red X or lime circle for
-       a safe return) marked.
-    2. An animated GIF: frame-by-frame playback with a live readout of step,
-       reward, energy, canisters, and the running total reward -- useful for
-       spotting things like "it clearly saw the vent and walked in anyway" or
-       "it's oscillating between two cells instead of committing to a path."
-
-Usage:
-    # trained checkpoint
-    python visualize_rollout.py --checkpoint checkpoints/ppo_final.pt --seed 7
-
-    # no checkpoint -> uses an untrained (random-weight) policy, useful as a
-    # sanity check on the environment/rendering itself
-    python visualize_rollout.py --seed 7
-
-    # random ACTION policy instead of a network at all (fastest sanity check)
-    python visualize_rollout.py --seed 7 --random-policy
-
-Outputs are written to ./rollout_viz/ by default (trajectory_seedN.png,
-rollout_seedN.gif).
-"""
-
 import argparse
 import os
 import re
@@ -43,10 +13,6 @@ from ppo import PPOAgent
 
 
 def parse_checkpoint_step(path):
-    """Best-effort extraction of the training step count from a checkpoint's
-    filename (e.g. 'ppo_step300000.pt' -> 300000, 'ppo_step500000_final.pt'
-    -> 500000). Returns None if the filename doesn't follow that pattern --
-    the plot just omits the step count rather than erroring out."""
     match = re.search(r"step(\d+)", os.path.basename(path))
     return int(match.group(1)) if match else None
 
@@ -60,16 +26,7 @@ def to_tensor(obs):
 
 
 def run_episode(env, agent=None, max_steps=500, deterministic=False, random_policy=False, seed=None):
-    """Runs one episode and records everything needed to visualize it.
 
-    agent=None + random_policy=True -> uniform random actions (fastest, no
-    network needed at all -- good for checking the env/renderer in isolation).
-    agent=None + random_policy=False -> not allowed, agent is required unless
-    random_policy is set.
-    deterministic=True -> take argmax action instead of sampling (shows the
-    policy's "best guess" rather than its stochastic behavior; useful once
-    training has converged enough that sampling noise obscures the strategy).
-    """
     obs, info = env.reset(seed=seed)
 
     record = {
@@ -124,9 +81,7 @@ def run_episode(env, agent=None, max_steps=500, deterministic=False, random_poli
     return record
 
 
-# ------------------------------------------------------------------ #
 # Static background (terrain + hazards + hotspots), shared by both outputs
-# ------------------------------------------------------------------ #
 
 def draw_background(ax, rec):
     grid_size = rec["grid_size"]
@@ -161,11 +116,7 @@ def draw_background(ax, rec):
     ax.set_xticks([])
     ax.set_yticks([])
 
-
-# ------------------------------------------------------------------ #
 # Output 1: static trajectory plot
-# ------------------------------------------------------------------ #
-
 def plot_trajectory(rec, save_path, checkpoint_step=None):
     fig, ax = plt.subplots(figsize=(8, 8))
     draw_background(ax, rec)
@@ -225,10 +176,8 @@ def plot_trajectory(rec, save_path, checkpoint_step=None):
     plt.close(fig)
     print(f"Saved trajectory plot: {save_path}")
 
-
-# ------------------------------------------------------------------ #
 # Output 2: animated GIF, frame-by-frame playback
-# ------------------------------------------------------------------ #
+
 
 def animate_rollout(rec, save_path, fps=8, checkpoint_step=None):
     fig, ax = plt.subplots(figsize=(7, 7.5))
@@ -278,10 +227,8 @@ def animate_rollout(rec, save_path, fps=8, checkpoint_step=None):
     plt.close(fig)
     print(f"Saved rollout animation: {save_path}")
 
-
-# ------------------------------------------------------------------ #
 # CLI
-# ------------------------------------------------------------------ #
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)

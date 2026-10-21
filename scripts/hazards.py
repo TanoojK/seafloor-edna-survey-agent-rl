@@ -119,9 +119,6 @@ def place_predator_zones(
     rng=None,
 ) -> list[dict]: 
     
-    """Places predator zones independently of hotspots (random location), avoiding
-    spawn and avoiding directly overlapping a hotspot's exact cell (so sampling
-    itself never has a forced attack roll. """
     rng = rng or np.random.default_rng()
     grid_size = impassable_mask.shape[0]
     zones = []
@@ -157,11 +154,8 @@ def place_predator_zones(
     return zones
 
 
-def build_hazard_mask(grid_size: int, 
+def build_hazard_mask(grid_size: int,
                       hazards: list[dict]) -> np.ndarray:
-    
-    """Combines all hazard zones (vents + predator) into one boolean occupancy mask,
-    using each hazard's precomputed irregular blob mask."""
     mask = np.zeros((grid_size, grid_size), dtype=bool)
     for hazard in hazards:
         mask |= hazard["mask"]
@@ -170,12 +164,7 @@ def build_hazard_mask(grid_size: int,
 
 def hazard_type_at(pos: tuple[int, int], 
                    hazards: list[dict]) -> str | None:
-    """
-    Returns "vent", "predator", or None for the given position, using each
-    hazard's precomputed irregular blob mask. If a cell is covered by both a
-    vent and predator zone (rare, possible with random placement), vent takes
-    priority since it's certain damage, not probabilistic.
-    """
+
     r, c = pos
     found_predator = False
     for hazard in hazards:

@@ -1,31 +1,3 @@
-"""
-Gymnasium environment for the eDNA seafloor survey task.
-
-Ties together everything built so far:
-    - terrain_v2.py    -> elevation generation + impassable mask + elevation step cost
-    - placement.py     -> spawn + eDNA hotspot placement + concentration field
-    - hazards.py       -> vent + predator zone placement, attack rolls
-
-Action space: Discrete(9)
-    0-7 -> movement in 8 directions (N, NE, E, SE, S, SW, W, NW)
-    8   -> sample (only has an effect if standing on an un-sampled hotspot cell)
-
-Observation space: Dict
-    "maps":    (5, grid_size, grid_size) float32 -> elevation, eDNA field,
-               vent mask, predator mask, sampled mask
-    "scalars": (6,) float32 -> agent_row, agent_col, energy, canisters,
-               spawn_row, spawn_col (all normalized to roughly [0, 1])
-
-Episode ends when any of:
-    - energy <= 0                          (ran out of power)
-    - agent enters a vent cell             (certain damage)
-    - a predator attack roll succeeds      (0.5% chance per step spent in a predator zone)
-    - agent returns to spawn after having left it  (successful mission completion)
-    - max_steps reached                    (safety cutoff, shouldn't normally trigger
-                                             given the energy budget, but prevents any
-                                             pathological infinite-loop edge case)
-"""
-
 import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
@@ -88,10 +60,7 @@ class SeafloorEDNAEnv(gym.Env):
 
         self._rng = np.random.default_rng()
 
-    # ------------------------------------------------------------------ #
     # Episode setup
-    # ------------------------------------------------------------------ #
-
     def reset(self, 
               seed: int | None = None, 
               options: dict | None = None):
@@ -114,22 +83,6 @@ class SeafloorEDNAEnv(gym.Env):
         return self._get_obs(), self._get_info()
     
     def _compute_potential(self) -> float:
-        """
-        Potential function for reward shaping: negative distance to the nearest
-        *reachable-for-sampling* hotspot, or to spawn once no more sampling is
-        possible. Used as a potential-based shaping term (gamma * phi(s') -
-        phi(s), added to reward each step) -- gives the agent dense signal
-        toward its current goal without changing the optimal policy (Ng et
-        al. 1999). Makes the existing sparse sampling/return-home reward much
-        easier to discover via gradient signal.
-
-        Canisters are limited (fewer than the max possible hotspot count), so
-        "nearest unsampled hotspot" stops being a valid goal once canisters
-        run out -- sampling there is physically impossible. Without this
-        check, the shaping term kept pulling the agent toward hotspots it
-        could never sample again instead of toward heading home, actively
-        working against the return-to-spawn objective.
-        """
         if self.canisters > 0:
             unsampled = [h for h in self.hotspots if self.sampled_mask[h] == 0]
         else:
@@ -139,20 +92,11 @@ class SeafloorEDNAEnv(gym.Env):
             dists = [np.hypot(self.agent_pos[0] - h[0], self.agent_pos[1] - h[1]) for h in unsampled]
             return -min(dists) * 0.2  # scaled down so shaping doesn't dominate other rewards
 
-        # no more sampling possible (out of canisters, or all hotspots sampled)
-        # -> shape toward spawn instead, so the agent still gets dense signal
-        # for the "get home safely" phase of the task
+
         dist_to_spawn = np.hypot(self.agent_pos[0] - self.spawn[0], self.agent_pos[1] - self.spawn[1])
         return -dist_to_spawn * 0.2
 
     def get_action_mask(self) -> np.ndarray:
-        """Bool array, len 9 (True=allowed). Blocks only the 8 movement actions
-        that would step directly onto a known-lethal vent cell -- vents are
-        fully visible and static, so there's no reason to let the policy ever
-        pick a move that's certain death; this makes that structurally
-        impossible instead of relying on it being learned. Predator zones are
-        NOT masked (probabilistic risk, a legitimate tradeoff). Sample action
-        (8) is always allowed."""
         mask = np.ones(9, dtype=bool)
         r, c = self.agent_pos
         for a, (dr, dc) in enumerate(DIRECTIONS):
@@ -162,20 +106,6 @@ class SeafloorEDNAEnv(gym.Env):
         return mask
 
     def _compute_danger_potential(self, danger_radius: float = 6.0, scale: float = 0.15) -> float:
-        """
-        Potential function for VENT-AVOIDANCE shaping: a dense, "getting warm
-        near danger" penalty that ramps up as the agent gets closer to a vent,
-        instead of danger only being felt at the moment of death (-20, once,
-        rare). Same potential-based-shaping structure as _compute_potential()
-        (telescopes cleanly given matching gamma), just pushing AWAY from
-        something instead of TOWARD something.
-
-        0 penalty at danger_radius tiles or farther from the nearest vent
-        cell; ramps linearly to -scale*danger_radius right at a vent's edge.
-        Predator zones are deliberately excluded -- they're a probabilistic
-        risk, not certain death, so brief exposure is a legitimate tradeoff,
-        not something to shape the agent away from entirely.
-        """
         if not np.any(self.vent_mask):
             return 0.0
         vent_cells = np.argwhere(self.vent_mask)
@@ -220,10 +150,8 @@ class SeafloorEDNAEnv(gym.Env):
         raise RuntimeError("Failed to generate a valid episode after max_regen_attempts -- "
                             "check placement constraints, they may be too strict for this grid size.")
 
-    # ------------------------------------------------------------------ #
-    # Step
-    # ------------------------------------------------------------------ #
 
+    # Step
     def step(self, 
              action: int):
         self.step_count += 1
@@ -260,13 +188,7 @@ class SeafloorEDNAEnv(gym.Env):
         # -- return to spawn (success condition) --
         if not terminated and self.has_left_spawn and self.agent_pos == self.spawn:
             terminated = True
-            # small flat bonus for a safe return (worth having, since dying already
-            # costs -15/-20, so "come home safely" deserves *some* credit on its
-            # own) -- but kept low on purpose. A large flat bonus here made a
-            # trivial one-tile-out-and-back round trip a competitive terminal
-            # strategy versus actually risking a real sampling run, since it
-            # collected most of the reward for near-zero cost/risk. Sampling
-            # reward now has to carry almost all of the incentive to explore.
+
             completion_bonus = 0.5 + 2.5 * self.n_samples_taken
             reward += completion_bonus
             info["end_reason"] = "returned_to_spawn"

@@ -1,48 +1,16 @@
-"""
-Training script for the eDNA seafloor survey agent.
-
-Runs N_ENVS environments in PARALLEL (separate OS processes, see vec_env.py),
-each collecting its own rollout simultaneously, then combines them into one
-PPO update. This is a wall-clock speedup only -- it does not change what's
-being learned, just how fast experience is collected. Each environment still
-gets its own correctly-computed GAE (see ppo.py's update_multi), so this
-doesn't sacrifice correctness for speed.
-
-Usage:
-    python train.py                  # full run (500k steps/env, 50x50 grid)
-    python train.py --fast-test      # small/fast proxy run for quickly checking
-                                      # whether a change helps, before committing
-                                      # to a full run (see FAST_TEST_* config below)
-
-Checkpoints are saved periodically to ./checkpoints/ -- if training on Colab,
-point CHECKPOINT_DIR at your mounted Google Drive so a disconnect doesn't lose
-your run.
-
-WINDOWS NOTE: this script MUST be run as `python train.py`, not imported or
-exec'd some other way -- the `if __name__ == "__main__":` guard at the bottom
-is not optional here. Windows' multiprocessing uses "spawn", which re-imports
-this whole file in every worker process; without the guard, each worker would
-try to spawn its own set of workers recursively.
-"""
-
 import argparse
 import os
 import time
 import numpy as np
 
-# ---------------------------------------------------------------------- #
 # Config 
-# ---------------------------------------------------------------------- #
-N_ENVS = 8                     # parallel environments -- tune down if you hit
-                                # CPU core or VRAM limits; 8 is a reasonable
-                                # starting point for a modern multi-core CPU
-                                # + RTX 3050
+
+N_ENVS = 8                     # parallel environments 
 TOTAL_TIMESTEPS = 500_000      # per-environment; total env-steps collected
                                 # across all workers is N_ENVS times this
-ROLLOUT_LENGTH = 2048          # steps PER ENVIRONMENT collected before each
-                                # PPO update (so each update uses
-                                # ROLLOUT_LENGTH * N_ENVS transitions total)
-CHECKPOINT_EVERY = 100_000      # timesteps (per-env) between checkpoint saves
+ROLLOUT_LENGTH = 2048          # steps PER ENVIRONMENT collected before each PPo update
+
+CHECKPOINT_EVERY = 100_000      
 CHECKPOINT_DIR = "./checkpoints"
 LOG_EVERY_EPISODES = 100      # print a summary every N completed episodes (across all envs)
 
@@ -51,68 +19,26 @@ N_MAP_CHANNELS = 5             # elevation, eDNA field, vent mask, predator mask
 N_SCALARS = 6                  # agent_row, agent_col, energy, canisters, spawn_row, spawn_col
 
 ENTROPY_COEF_START = 0.03
-ENTROPY_COEF_END = 0.008       # was 0.015 -- that value was chosen to compensate for the
-                                # per-env timestep counting bug (schedules were racing 8x
-                                # too fast relative to real experience), which is now fixed
-                                # separately. With the schedule now correctly spanning the
-                                # true 500k per-env steps, and value_coef raised to 1.0
-                                # above (targeting what looks like the real cause -- a
-                                # noisy, unconverged critic giving weak advantage signal,
-                                # not too little exploration), a lower floor should let the
-                                # policy actually commit once the critic gives it something
-                                # real to commit to.
+ENTROPY_COEF_END = 0.008       
 LR_START = 3e-4
-LR_END = 3e-5                  # 10x decay over the run -- standard PPO practice, and the
-                                # volatility in value_loss across every run so far suggests
-                                # late-training updates are still as aggressive as early
-                                # ones, fighting against convergence
+LR_END = 3e-5                  
+
 CURRICULUM_START_DIST = 10.0
 CURRICULUM_END_DIST = None      # None = grows up to grid_size * 0.7
-CURRICULUM_END_FRACTION = 0.95   # was 0.75 -- regression consistently starts right as
-                                  # curriculum nears full difficulty; giving it more of
-                                  # the run at moderate difficulty before the hardest
-                                  # cases kick in should help consolidation
+CURRICULUM_END_FRACTION = 0.75   
 
-# ---- fast-test mode: a shorter proxy run for quickly checking whether a
-# change helps, in minutes instead of the ~20+ min a full run takes. Bugs like
-# late-training forgetting already show up within the first ~1/4 of a full
-# run's timesteps, so a shortened version tends to surface the same signal
-# fast. Only trust a FULL run to confirm a fix actually works end to end --
-# this is for ruling things OUT quickly, not for a final verdict.
-#
-# NOTE: grid_size is deliberately NOT shrunk here. Shrinking it seemed like an
-# obvious extra speedup, but hotspot placement has several distance constants
-# (min_dist_from_spawn, min_dist_between_hotspots, curriculum start/ceiling)
-# that all interact -- scaling one without the others made hotspot placement
-# fail 100% of the time on a 20x20 grid, and even partial rescaling still hit
-# geometric infeasibility (can't fit N hotspots that are all close to spawn
-# AND far apart from each other in a small ring). Not worth the fragility for
-# a speed gain -- timestep count alone is a safer, still-useful lever. ----#
+# Fast-test proxy run config 
 FAST_TEST_TOTAL_TIMESTEPS = 100_000
 FAST_TEST_GRID_SIZE = GRID_SIZE   # NOT shrunk -- see note above
 FAST_TEST_CHECKPOINT_DIR = "./checkpoints_fast_test"
 
-# ---- auto-stop: if avg_samples is still ~0 this far into a run, something is
-# almost certainly broken (see project history -- this has happened multiple
-# times). Stop early instead of burning the rest of the timestep budget and
-# only finding out at the very end. ---- #
-STUCK_CHECK_AFTER_TIMESTEPS = 420_000    # must be checked AFTER curriculum finishes
-                                          # ramping (75% of TOTAL_TIMESTEPS = 375k), or
-                                          # it judges "stuck" while the task is still
-                                          # actively getting harder, which looks like
-                                          # failure even when the policy is learning fine
+STUCK_CHECK_AFTER_TIMESTEPS = 420_000    
 STUCK_CHECK_SCALE_WITH_FAST_TEST = True  # scale the above proportionally in --fast-test
 STUCK_AVG_SAMPLES_THRESHOLD = 0.01       # "still ~0" cutoff
 
 
 def train(fast_test: bool = False):
-    # imports deliberately deferred to here, not module level -- Windows'
-    # spawn re-executes this file's top-level code in every worker process.
-    # If torch/matplotlib were imported at module level, every worker would
-    # load torch's full CUDA DLL stack too, even though workers only need
-    # environment.py. With N_ENVS processes doing that simultaneously, it can
-    # exhaust Windows' page file. Keeping these imports inside train() means
-    # spawn's re-execution of this file stays lightweight in child processes.
+
     import torch
     import matplotlib.pyplot as plt
     from vec_env import SubprocVecEnv
@@ -141,9 +67,7 @@ def train(fast_test: bool = False):
         n_actions=9,
         grid_size=grid_size,
         gamma=0.99,
-        device=torch.device("cpu"),  # model is tiny -- GPU barely helps it, and this
-                                      # sidesteps VRAM constraints entirely. The real
-                                      # speedup from N_ENVS is CPU-side env stepping.
+        device=torch.device("cpu")
     )
     agent.init_parallel_buffers(N_ENVS)
 
@@ -172,15 +96,7 @@ def train(fast_test: bool = False):
 
     try:
         while timesteps_done < total_timesteps:
-            # ---- collect one rollout: ROLLOUT_LENGTH steps, across all N_ENVS
-            # environments simultaneously ---- #
             for _ in range(ROLLOUT_LENGTH):
-                # curriculum ceiling is computed from GLOBAL progress, same formula as
-                # the original single-env version -- passed to every worker each step,
-                # and applied by the worker itself whenever ITS OWN episode ends (see
-                # vec_env.py's _worker), so each environment independently gets a fresh
-                # randomly-sampled difficulty within [start, current ceiling] at its own
-                # episode boundaries, keeping easy examples mixed in throughout training.
                 progress_for_curriculum = min(timesteps_done / total_timesteps, 1.0)
                 curriculum_progress = min(progress_for_curriculum / CURRICULUM_END_FRACTION, 1.0)
                 if CURRICULUM_END_DIST is None:
@@ -212,23 +128,9 @@ def train(fast_test: bool = False):
                         episodes_done += 1
                         episode_rewards[i] = 0.0
 
-                # timesteps_done is PER-ENVIRONMENT progress (matches TOTAL_TIMESTEPS'
-                # stated meaning, and is what every schedule below is based on) --
-                # incremented ONCE per rollout-step here, not once per environment.
-                # Incrementing it N_ENVS times per step (a bug in an earlier version)
-                # made every schedule (curriculum, entropy, LR) race through 8x faster
-                # than intended relative to how much any single environment had
-                # actually experienced -- the run would hit "500,000" and stop after
-                # only 500,000/N_ENVS real per-env steps, with curriculum/entropy already
-                # fully decayed at that point. total_env_steps (below) tracks the real
-                # combined count across all workers, for logging only -- never used
-                # for scheduling.
                 timesteps_done += 1
                 total_env_steps += N_ENVS
 
-                # use a milestone counter, not a modulo check -- multiple envs can
-                # finish an episode in the same step, so episodes_done can jump by
-                # more than 1 and skip past an exact multiple of LOG_EVERY_EPISODES
                 while episodes_done >= next_log_episode:
                     recent = episode_rewards_log[-LOG_EVERY_EPISODES:]
                     recent_reasons = episode_end_reasons[-LOG_EVERY_EPISODES:]
@@ -251,11 +153,7 @@ def train(fast_test: bool = False):
                 if timesteps_done >= total_timesteps:
                     break
 
-            # ---- entropy annealing: decays across the FULL run (raw progress),
-            # deliberately NOT tied to curriculum_progress -- see prior notes on
-            # why they need to be decoupled (entropy hitting its floor exactly
-            # when curriculum hits full difficulty left no exploration budget
-            # for the hardest final stretch of training). ---- #
+
             progress = min(timesteps_done / total_timesteps, 1.0)
             agent.entropy_coef = ENTROPY_COEF_START + (ENTROPY_COEF_END - ENTROPY_COEF_START) * progress
 

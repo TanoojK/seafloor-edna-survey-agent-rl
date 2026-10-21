@@ -5,10 +5,6 @@ def place_spawn(impassable_mask: np.ndarray,
                 edge_margin_spawn: float = 0.2, 
                 max_attempts: int = 100, 
                 rng=None) -> tuple[int, int] | None:
-    """
-    Returns (row, col) for a random passable spawn location, or None if no
-    valid spot was found within max_attempts (caller should regenerate terrain).
-    """
     rng = rng or np.random.default_rng()
     grid_size = impassable_mask.shape[0]
     margin_spawn = int(grid_size * edge_margin_spawn)
@@ -32,12 +28,7 @@ def place_edna_hotspots(
     max_attempts_per_hotspot: int = 200,
     edge_margin_hotspots: float = 0.05,
     rng=None,
-) -> list[tuple[int, int]] | None:
-    """
-    Returns a list of (row, col) positions for eDNA hotspots, or None if it
-    couldn't place all of them within the attempt budget (caller should
-    regenerate terrain/spawn and retry).
-    """
+    ) -> list[tuple[int, int]] | None:
     rng = rng or np.random.default_rng()
     grid_size = impassable_mask.shape[0]
     hotspots: list[tuple[int, int]] = []
@@ -79,10 +70,6 @@ def generate_edna_field(
     sigma_range: tuple[float, float] = (3.0, 6.0),
     rng=None,
 ) -> np.ndarray:
-    """
-    Builds a continuous eDNA concentration field as a sum of Gaussians centered
-    at each hotspot. Returned field is normalized to [0, 1].
-    """
     rng = rng or np.random.default_rng()
     field = np.zeros((grid_size, grid_size), dtype=np.float32)
     rows, cols = np.meshgrid(np.arange(grid_size), np.arange(grid_size), indexing="ij")
