@@ -23,9 +23,9 @@ ENTROPY_COEF_END = 0.008
 LR_START = 3e-4
 LR_END = 3e-5                  
 
-CURRICULUM_START_DIST = 10.0
-CURRICULUM_END_DIST = None      # None = grows up to grid_size * 0.7
-CURRICULUM_END_FRACTION = 0.75   
+CURRICULUM_START_DIST = 5
+CURRICULUM_END_DIST = 5     
+CURRICULUM_END_FRACTION = 1  
 
 # Fast-test proxy run config 
 FAST_TEST_TOTAL_TIMESTEPS = 100_000
@@ -33,9 +33,8 @@ FAST_TEST_GRID_SIZE = GRID_SIZE   # NOT shrunk -- see note above
 FAST_TEST_CHECKPOINT_DIR = "./checkpoints_fast_test"
 
 STUCK_CHECK_AFTER_TIMESTEPS = 420_000    
-STUCK_CHECK_SCALE_WITH_FAST_TEST = True  # scale the above proportionally in --fast-test
+STUCK_CHECK_SCALE_WITH_FAST_TEST = True  # scale the above proportionally in fast-test
 STUCK_AVG_SAMPLES_THRESHOLD = 0.01       # "still ~0" cutoff
-
 
 def train(fast_test: bool = False):
 
@@ -51,6 +50,9 @@ def train(fast_test: bool = False):
         int(STUCK_CHECK_AFTER_TIMESTEPS * (total_timesteps / TOTAL_TIMESTEPS))
         if (fast_test and STUCK_CHECK_SCALE_WITH_FAST_TEST) else STUCK_CHECK_AFTER_TIMESTEPS
     )
+    samples_history = []
+    baseline_samples = None
+
 
     if fast_test:
         print(f"*** FAST-TEST MODE: {total_timesteps} steps/env (full {grid_size}x{grid_size} grid, "
@@ -99,6 +101,7 @@ def train(fast_test: bool = False):
             for _ in range(ROLLOUT_LENGTH):
                 progress_for_curriculum = min(timesteps_done / total_timesteps, 1.0)
                 curriculum_progress = min(progress_for_curriculum / CURRICULUM_END_FRACTION, 1.0)
+                curriculum_progress = curriculum_progress ** 2
                 if CURRICULUM_END_DIST is None:
                     curriculum_ceiling = CURRICULUM_START_DIST + curriculum_progress * (
                         grid_size * 0.6 - CURRICULUM_START_DIST
@@ -172,16 +175,24 @@ def train(fast_test: bool = False):
             recent = episode_rewards_log[-LOG_EVERY_EPISODES:] if episode_rewards_log else [0.0]
             recent_samples = episode_samples_log[-LOG_EVERY_EPISODES:] if episode_samples_log else [0.0]
             avg_samples_now = float(np.mean(recent_samples))
+            samples_history.append(avg_samples_now)
+            if baseline_samples is None and timesteps_done >= stuck_check_after * 0.25:
+                baseline_samples = sum(samples_history) / len(samples_history)
             with open(metrics_log_path, "a") as f:
                 f.write(f"{timesteps_done},{episodes_done},{np.mean(recent):.4f},"
                         f"{avg_samples_now:.4f},{update_stats['entropy']:.4f},"
                         f"{update_stats['value_loss']:.4f},{update_stats['policy_loss']:.4f},"
                         f"{current_lr:.6f},{time.time() - start_time:.1f}\n")
 
-            # ---- auto-stop ---- #
-            if timesteps_done >= stuck_check_after and avg_samples_now < STUCK_AVG_SAMPLES_THRESHOLD:
-                print(f"\n!!! STUCK: avg_samples={avg_samples_now:.4f} after {timesteps_done} steps "
-                      f"(threshold={STUCK_AVG_SAMPLES_THRESHOLD}, checked after {stuck_check_after} steps). "
+            # ---- auto-stop if stuck ---- #
+            recent_window = samples_history[-10:]
+            recent_avg = sum(recent_window) / len(recent_window)
+            if (baseline_samples is not None and timesteps_done >= stuck_check_after
+                    and recent_avg < max(STUCK_AVG_SAMPLES_THRESHOLD, baseline_samples * 1.5)):
+                print(f"\n! STUCK: recent avg_samples={recent_avg:.4f} after {timesteps_done} steps "
+                      f"(baseline={baseline_samples:.4f}, "
+                      f"needed > {max(STUCK_AVG_SAMPLES_THRESHOLD, baseline_samples * 1.5):.4f}, "
+                      f"checked after {stuck_check_after} steps). "
                       f"Stopping early -- something is very likely broken, not just 'needs more training'. "
                       f"Checkpoint saved below for inspection. !!!\n")
                 torch.save(agent.model.state_dict(), os.path.join(checkpoint_dir, f"ppo_step{timesteps_done}_STUCK.pt"))

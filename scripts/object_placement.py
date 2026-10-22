@@ -22,7 +22,7 @@ def place_edna_hotspots(
     impassable_mask: np.ndarray,
     spawn: tuple[int, int],
     n_hotspots: int,
-    min_dist_from_spawn: float = 8.0,
+    min_dist_from_spawn: float = 2.0,
     max_dist_from_spawn: float | None = None,
     min_dist_between_hotspots: float = 6.0,
     max_attempts_per_hotspot: int = 200,

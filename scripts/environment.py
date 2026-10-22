@@ -33,7 +33,7 @@ class SeafloorEDNAEnv(gym.Env):
         grid_size: int = 50,
         max_energy: float = 300.0,
         n_canisters: int = 3,
-        n_hotspots_range: tuple[int, int] = (3, 5),
+        n_hotspots_range: tuple[int, int] = (1,1),
         n_vents_max: int = 2,
         predator_attack_prob: float = 0.005,
         max_steps: int = 500,
