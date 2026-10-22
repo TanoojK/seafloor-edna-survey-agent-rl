@@ -188,10 +188,10 @@ def train(fast_test: bool = False):
             recent_window = samples_history[-10:]
             recent_avg = sum(recent_window) / len(recent_window)
             if (baseline_samples is not None and timesteps_done >= stuck_check_after
-                    and recent_avg < max(STUCK_AVG_SAMPLES_THRESHOLD, baseline_samples * 1.5)):
+                    and recent_avg < max(STUCK_AVG_SAMPLES_THRESHOLD, min(baseline_samples * 1.5, 0.3))):
                 print(f"\n! STUCK: recent avg_samples={recent_avg:.4f} after {timesteps_done} steps "
                       f"(baseline={baseline_samples:.4f}, "
-                      f"needed > {max(STUCK_AVG_SAMPLES_THRESHOLD, baseline_samples * 1.5):.4f}, "
+                      f"needed > {max(STUCK_AVG_SAMPLES_THRESHOLD, min(baseline_samples * 1.5, 0.3)):.4f}, "
                       f"checked after {stuck_check_after} steps). "
                       f"Stopping early -- something is very likely broken, not just 'needs more training'. "
                       f"Checkpoint saved below for inspection. !!!\n")
