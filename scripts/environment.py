@@ -54,7 +54,7 @@ class SeafloorEDNAEnv(gym.Env):
 
         self.action_space = spaces.Discrete(9)
         self.observation_space = spaces.Dict({
-            "maps": spaces.Box(low=0.0, high=1.0, shape=(5, grid_size, grid_size), dtype=np.float32),
+            "maps": spaces.Box(low=0.0, high=1.0, shape=(6, grid_size, grid_size), dtype=np.float32),
             "scalars": spaces.Box(low=-1.0, high=2.0, shape=(6,), dtype=np.float32),
         })
 
@@ -186,7 +186,7 @@ class SeafloorEDNAEnv(gym.Env):
             info["end_reason"] = "out_of_energy"
 
         # -- return to spawn (success condition) --
-        if not terminated and self.has_left_spawn and self.agent_pos == self.spawn:
+        if not terminated and self.has_left_spawn and self.agent_pos == self.spawn and self.n_samples_taken > 0:
             terminated = True
 
             completion_bonus = 0.5 + 2.5 * self.n_samples_taken
@@ -260,12 +260,15 @@ class SeafloorEDNAEnv(gym.Env):
 
 
     def _get_obs(self):
+        agent_map = np.zeros_like(self.elevation, dtype=np.float32)
+        agent_map[tuple(self.agent_pos)] = 1.0
         maps = np.stack([
             self.elevation,
             self.edna_field,
             self.vent_mask.astype(np.float32),
             self.predator_mask.astype(np.float32),
             self.sampled_mask,
+            agent_map,
         ], axis=0).astype(np.float32)
 
         scalars = np.array([
@@ -290,6 +293,4 @@ class SeafloorEDNAEnv(gym.Env):
     def render(self):
         if self.render_mode != "rgb_array":
             return None
-        # lightweight placeholder -- full matplotlib rendering comes later as a
-        # separate GIF-export utility, not baked into the env's hot path
         return None

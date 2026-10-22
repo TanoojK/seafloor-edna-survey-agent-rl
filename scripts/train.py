@@ -15,7 +15,7 @@ CHECKPOINT_DIR = "./checkpoints"
 LOG_EVERY_EPISODES = 100      # print a summary every N completed episodes (across all envs)
 
 GRID_SIZE = 50
-N_MAP_CHANNELS = 5             # elevation, eDNA field, vent mask, predator mask, sampled mask
+N_MAP_CHANNELS = 6             # elevation, eDNA field, vent mask, predator mask, sampled mask , position mask
 N_SCALARS = 6                  # agent_row, agent_col, energy, canisters, spawn_row, spawn_col
 
 ENTROPY_COEF_START = 0.03
@@ -60,15 +60,15 @@ def train(fast_test: bool = False):
     print(f"Running {N_ENVS} parallel environments.")
     os.makedirs(checkpoint_dir, exist_ok=True)
 
-    vec_env = SubprocVecEnv(n_envs=N_ENVS, grid_size=grid_size, max_steps=300, gamma=0.99)
+    vec_env = SubprocVecEnv(n_envs=N_ENVS, grid_size=grid_size, max_steps=500, gamma=0.99)
     agent = PPOAgent(
-        n_map_channels=N_MAP_CHANNELS,
-        n_scalars=N_SCALARS,
-        n_actions=9,
-        grid_size=grid_size,
-        gamma=0.99,
-        device=torch.device("cpu")
-    )
+            n_map_channels=N_MAP_CHANNELS,
+            n_scalars=N_SCALARS,
+            n_actions=9,
+            grid_size=grid_size,
+            gamma=0.99,
+            device=torch.device("cpu")
+        )
     agent.init_parallel_buffers(N_ENVS)
 
     obs, masks = vec_env.reset(curriculum_start=CURRICULUM_START_DIST)
