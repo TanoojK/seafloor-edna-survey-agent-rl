@@ -14,7 +14,7 @@ CHECKPOINT_EVERY = 100_000
 CHECKPOINT_DIR = "./checkpoints"
 LOG_EVERY_EPISODES = 100      # print a summary every N completed episodes (across all envs)
 
-GRID_SIZE = 49
+GRID_SIZE = 50
 N_MAP_CHANNELS = 5             # elevation, eDNA field, vent mask, predator mask, sampled mask (agent-centered 49x49 window)
 N_SCALARS = 4                  # energy, canisters, spawn offset row, spawn offset col
   
@@ -67,7 +67,7 @@ def train(fast_test: bool = False):
             n_map_channels=N_MAP_CHANNELS,
             n_scalars=N_SCALARS,
             n_actions=9,
-            grid_size=grid_size,
+            grid_size=49,
             gamma=0.99,
             device=torch.device("cpu")
         )
