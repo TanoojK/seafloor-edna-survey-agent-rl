@@ -30,10 +30,10 @@ class SeafloorEDNAEnv(gym.Env):
 
     def __init__(
         self,
-        grid_size: int = 50,
+        grid_size: int = 49,
         max_energy: float = 300.0,
         n_canisters: int = 3,
-        n_hotspots_range: tuple[int, int] = (1,1),
+        n_hotspots_range: tuple[int, int] = (3,5),
         n_vents_max: int = 2,
         predator_attack_prob: float = 0.005,
         max_steps: int = 500,
@@ -54,8 +54,8 @@ class SeafloorEDNAEnv(gym.Env):
 
         self.action_space = spaces.Discrete(9)
         self.observation_space = spaces.Dict({
-            "maps": spaces.Box(low=0.0, high=1.0, shape=(6, grid_size, grid_size), dtype=np.float32),
-            "scalars": spaces.Box(low=-1.0, high=2.0, shape=(6,), dtype=np.float32),
+            "maps": spaces.Box(low=0.0, high=1.0, shape=(5, grid_size, grid_size), dtype=np.float32),
+            "scalars": spaces.Box(low=-1.0, high=2.0, shape=(4,), dtype=np.float32),
         })
 
         self._rng = np.random.default_rng()
@@ -260,24 +260,23 @@ class SeafloorEDNAEnv(gym.Env):
 
 
     def _get_obs(self):
-        agent_map = np.zeros_like(self.elevation, dtype=np.float32)
-        agent_map[tuple(self.agent_pos)] = 1.0
-        maps = np.stack([
+        R = 24
+        base = np.stack([
             self.elevation,
             self.edna_field,
             self.vent_mask.astype(np.float32),
             self.predator_mask.astype(np.float32),
             self.sampled_mask,
-            agent_map,
         ], axis=0).astype(np.float32)
+        padded = np.pad(base, ((0, 0), (R, R), (R, R)))
+        r, c = self.agent_pos
+        maps = padded[:, r:r + 2 * R + 1, c:c + 2 * R + 1]
 
         scalars = np.array([
-            self.agent_pos[0] / self.grid_size,
-            self.agent_pos[1] / self.grid_size,
             self.energy / self.max_energy,
             self.canisters / self.n_canisters_start,
-            self.spawn[0] / self.grid_size,
-            self.spawn[1] / self.grid_size,
+            (self.spawn[0] - r) / self.grid_size,
+            (self.spawn[1] - c) / self.grid_size,
         ], dtype=np.float32)
 
         return {"maps": maps, "scalars": scalars}

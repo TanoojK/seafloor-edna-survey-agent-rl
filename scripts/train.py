@@ -14,27 +14,27 @@ CHECKPOINT_EVERY = 100_000
 CHECKPOINT_DIR = "./checkpoints"
 LOG_EVERY_EPISODES = 100      # print a summary every N completed episodes (across all envs)
 
-GRID_SIZE = 50
-N_MAP_CHANNELS = 6             # elevation, eDNA field, vent mask, predator mask, sampled mask , position mask
-N_SCALARS = 6                  # agent_row, agent_col, energy, canisters, spawn_row, spawn_col
-
+GRID_SIZE = 49
+N_MAP_CHANNELS = 5             # elevation, eDNA field, vent mask, predator mask, sampled mask (agent-centered 49x49 window)
+N_SCALARS = 4                  # energy, canisters, spawn offset row, spawn offset col
+  
 ENTROPY_COEF_START = 0.03
 ENTROPY_COEF_END = 0.008       
 LR_START = 3e-4
 LR_END = 3e-5                  
 
-CURRICULUM_START_DIST = 5
-CURRICULUM_END_DIST = 5     
+CURRICULUM_START_DIST = 10
+CURRICULUM_END_DIST = None  # if None, curriculum will end at 60% of grid size   
 CURRICULUM_END_FRACTION = 1  
 
 # Fast-test proxy run config 
 FAST_TEST_TOTAL_TIMESTEPS = 100_000
-FAST_TEST_GRID_SIZE = GRID_SIZE   # NOT shrunk -- see note above
+FAST_TEST_GRID_SIZE = GRID_SIZE   
 FAST_TEST_CHECKPOINT_DIR = "./checkpoints_fast_test"
 
 STUCK_CHECK_AFTER_TIMESTEPS = 420_000    
 STUCK_CHECK_SCALE_WITH_FAST_TEST = True  # scale the above proportionally in fast-test
-STUCK_AVG_SAMPLES_THRESHOLD = 0.01       # "still ~0" cutoff
+STUCK_AVG_SAMPLES_THRESHOLD = 0.02       # "still ~0" cutoff
 
 def train(fast_test: bool = False):
 
