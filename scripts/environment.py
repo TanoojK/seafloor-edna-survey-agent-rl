@@ -23,7 +23,7 @@ SAMPLE_ACTION = 8
 CARDINAL_COST = 1.0
 DIAGONAL_COST = 1.5
 ELEVATION_FLAT_COST = 0.1
-
+STEP_ENERGY_COST = 0.1
 
 class SeafloorEDNAEnv(gym.Env):
     metadata = {"render_modes": ["rgb_array"]}
@@ -55,7 +55,7 @@ class SeafloorEDNAEnv(gym.Env):
         self.action_space = spaces.Discrete(9)
         self.observation_space = spaces.Dict({
             "maps": spaces.Box(low=0.0, high=1.0, shape=(5, grid_size, grid_size), dtype=np.float32),
-            "scalars": spaces.Box(low=-1.0, high=2.0, shape=(4,), dtype=np.float32),
+            "scalars": spaces.Box(low=-1.0, high=2.0, shape=(5,), dtype=np.float32),
         })
 
         self._rng = np.random.default_rng()
@@ -83,18 +83,16 @@ class SeafloorEDNAEnv(gym.Env):
         return self._get_obs(), self._get_info()
     
     def _compute_potential(self) -> float:
-        if self.canisters > 0:
+        d_home = np.hypot(self.agent_pos[0] - self.spawn[0], self.agent_pos[1] - self.spawn[1])
+        low_energy = self.energy < 1.5 * d_home + 20.0
+        go_home = self.canisters <= 0 or (self.n_samples_taken > 0 and low_energy)
+
+        if not go_home:
             unsampled = [h for h in self.hotspots if self.sampled_mask[h] == 0]
-        else:
-            unsampled = []
-
-        if unsampled:
-            dists = [np.hypot(self.agent_pos[0] - h[0], self.agent_pos[1] - h[1]) for h in unsampled]
-            return -min(dists) * 0.2  # scaled down so shaping doesn't dominate other rewards
-
-
-        dist_to_spawn = np.hypot(self.agent_pos[0] - self.spawn[0], self.agent_pos[1] - self.spawn[1])
-        return -dist_to_spawn * 0.2
+            if unsampled:
+                dists = [np.hypot(self.agent_pos[0] - h[0], self.agent_pos[1] - h[1]) for h in unsampled]
+                return -min(dists) * 0.2
+        return -d_home * 0.2
 
     def get_action_mask(self) -> np.ndarray:
         mask = np.ones(9, dtype=bool)
@@ -156,6 +154,7 @@ class SeafloorEDNAEnv(gym.Env):
              action: int):
         self.step_count += 1
         reward = -0.04  # small per-step cost, encourages efficiency
+        self.energy -= STEP_ENERGY_COST
         terminated = False
         truncated = False
         info = {}
@@ -272,15 +271,19 @@ class SeafloorEDNAEnv(gym.Env):
         r, c = self.agent_pos
         maps = padded[:, r:r + 2 * R + 1, c:c + 2 * R + 1]
 
+        d_home = np.hypot(r - self.spawn[0], c - self.spawn[1])
+        margin = (self.energy - 1.2 * d_home) / self.max_energy
+
         scalars = np.array([
             self.energy / self.max_energy,
             self.canisters / self.n_canisters_start,
             (self.spawn[0] - r) / self.grid_size,
             (self.spawn[1] - c) / self.grid_size,
+            margin,
         ], dtype=np.float32)
 
         return {"maps": maps, "scalars": scalars}
-
+    
     def _get_info(self):
         return {
             "energy": self.energy,
