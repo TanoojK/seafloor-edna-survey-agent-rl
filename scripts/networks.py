@@ -34,7 +34,9 @@ class ActorCritic(nn.Module):
         self.actor_encoder = CNNEncoder(n_map_channels, grid_size, cnn_out_dim)
         self.critic_encoder = CNNEncoder(n_map_channels, grid_size, cnn_out_dim)
 
-        combined_dim = cnn_out_dim + n_scalars
+        self.actor_scalar = nn.Sequential(nn.Linear(n_scalars, 64), nn.ReLU())
+        self.critic_scalar = nn.Sequential(nn.Linear(n_scalars, 64), nn.ReLU())
+        combined_dim = cnn_out_dim + 64
         self.actor_trunk = nn.Sequential(nn.Linear(combined_dim, hidden_dim), nn.ReLU())
         self.critic_trunk = nn.Sequential(nn.Linear(combined_dim, hidden_dim), nn.ReLU())
 
@@ -45,8 +47,8 @@ class ActorCritic(nn.Module):
         """Returns action distribution and state value estimate.
         action_mask (optional): (B, n_actions) bool, True=allowed. Masked-out
         actions get -inf logits so Categorical assigns them ~0 probability."""
-        actor_features = self.actor_trunk(torch.cat([self.actor_encoder(maps), scalars], dim=-1))
-        critic_features = self.critic_trunk(torch.cat([self.critic_encoder(maps), scalars], dim=-1))
+        actor_features = self.actor_trunk(torch.cat([self.actor_encoder(maps), self.actor_scalar(scalars)], dim=-1))
+        critic_features = self.critic_trunk(torch.cat([self.critic_encoder(maps), self.critic_scalar(scalars)], dim=-1))
 
         logits = self.actor_head(actor_features)
         if action_mask is not None:

@@ -97,9 +97,9 @@ class PPOAgent:
 
                 self.optimizer.zero_grad()
                 loss.backward()
-                actor_params = list(self.model.actor_encoder.parameters()) + \
+                actor_params = list(self.model.actor_encoder.parameters()) + list(self.model.actor_scalar.parameters()) + \
                     list(self.model.actor_trunk.parameters()) + list(self.model.actor_head.parameters())
-                critic_params = list(self.model.critic_encoder.parameters()) + \
+                critic_params = list(self.model.critic_encoder.parameters()) + list(self.model.critic_scalar.parameters()) + \
                     list(self.model.critic_trunk.parameters()) + list(self.model.critic_head.parameters())
                 nn.utils.clip_grad_norm_(actor_params, max_norm=0.5)
                 nn.utils.clip_grad_norm_(critic_params, max_norm=0.5)

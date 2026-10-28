@@ -55,7 +55,8 @@ def run_episode(env, agent=None, max_steps=500, deterministic=False, random_poli
             with torch.no_grad():
                 maps_b = maps.unsqueeze(0).to(agent.device)
                 scalars_b = scalars.unsqueeze(0).to(agent.device)
-                dist, value = agent.model.forward(maps_b, scalars_b)
+                mask_b = torch.tensor(env.get_action_mask()).unsqueeze(0).to(agent.device)
+                dist, value = agent.model.forward(maps_b, scalars_b, mask_b)
                 action = (torch.argmax(dist.probs, dim=-1) if deterministic else dist.sample()).item()
 
         obs, reward, terminated, truncated, info = env.step(action)

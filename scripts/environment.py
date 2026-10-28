@@ -23,7 +23,8 @@ SAMPLE_ACTION = 8
 CARDINAL_COST = 1.0
 DIAGONAL_COST = 1.5
 ELEVATION_FLAT_COST = 0.1
-STEP_ENERGY_COST = 0.1
+STEP_ENERGY_COST = 0.0
+IDLE_ENERGY_COST = 1.0
 
 class SeafloorEDNAEnv(gym.Env):
     metadata = {"render_modes": ["rgb_array"]}
@@ -72,7 +73,7 @@ class SeafloorEDNAEnv(gym.Env):
 
         self.agent_pos = self.spawn
         self.energy = self.max_energy
-        self.canisters = self.n_canisters_start
+        self.canisters = int(self._rng.integers(1, self.n_canisters_start + 1))
         self.sampled_mask = np.zeros((self.grid_size, self.grid_size), dtype=np.float32)
         self.has_left_spawn = False
         self.step_count = 0
@@ -158,6 +159,7 @@ class SeafloorEDNAEnv(gym.Env):
         terminated = False
         truncated = False
         info = {}
+        prev_pos = self.agent_pos
 
         if action in range(8):
             reward += self._handle_movement(action)
@@ -165,7 +167,9 @@ class SeafloorEDNAEnv(gym.Env):
             reward += self._handle_sample()
         else:
             raise ValueError(f"Invalid action {action}, expected 0-8")
-
+        if self.agent_pos == prev_pos:
+            self.energy -= IDLE_ENERGY_COST
+            
         # -- hazard checks happen AFTER movement resolves, based on new position --
         hazard = hazard_type_at(self.agent_pos, self.all_hazards)
         if hazard == "vent":
