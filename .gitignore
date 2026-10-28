@@ -12,6 +12,7 @@ __pycache__/
 # Training outputs (large binary files -- don't belong in git)
 scripts/checkpoints/
 scripts/checkpoints_fast_test/
+scripts/checkpoints_old/
 *.pt
 
 # Visualization outputs (regenerable, and GIFs/PNGs bloat repo size fast)
