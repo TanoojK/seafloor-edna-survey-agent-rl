@@ -25,13 +25,16 @@ DIAGONAL_COST = 1.5
 ELEVATION_FLAT_COST = 0.1
 STEP_ENERGY_COST = 0.0
 IDLE_ENERGY_COST = 1.0
+VIEW_RADIUS = 24
+VIEW = 2 * VIEW_RADIUS + 1 
+RETURN_START_PROB = 0.3
 
 class SeafloorEDNAEnv(gym.Env):
     metadata = {"render_modes": ["rgb_array"]}
 
     def __init__(
         self,
-        grid_size: int = 49,
+        grid_size: int = 50,
         max_energy: float = 300.0,
         n_canisters: int = 3,
         n_hotspots_range: tuple[int, int] = (3,5),
@@ -55,7 +58,7 @@ class SeafloorEDNAEnv(gym.Env):
 
         self.action_space = spaces.Discrete(9)
         self.observation_space = spaces.Dict({
-            "maps": spaces.Box(low=0.0, high=1.0, shape=(6, grid_size, grid_size), dtype=np.float32),
+            "maps": spaces.Box(low=0.0, high=1.0, shape=(6, VIEW, VIEW), dtype=np.float32),
             "scalars": spaces.Box(low=-1.0, high=2.0, shape=(5,), dtype=np.float32),
         })
 
@@ -78,10 +81,28 @@ class SeafloorEDNAEnv(gym.Env):
         self.has_left_spawn = False
         self.step_count = 0
         self.n_samples_taken = 0
+        self.return_start = False
+        if self._rng.random() < RETURN_START_PROB:
+            self._start_in_return_phase()
         self._prev_potential = self._compute_potential()
         self._prev_danger_potential = self._compute_danger_potential()
 
         return self._get_obs(), self._get_info()
+    
+    def _start_in_return_phase(self):
+        rr, cc = np.mgrid[0:self.grid_size, 0:self.grid_size]
+        dist = np.hypot(rr - self.spawn[0], cc - self.spawn[1])
+        cells = np.argwhere((~self.impassable) & (~self.vent_mask) & (dist >= 6.0) & (dist <= 35.0))
+        if len(cells) == 0:
+            return
+        r, c = (int(v) for v in cells[int(self._rng.integers(len(cells)))])
+        self.agent_pos = (r, c)
+        self.canisters = 0
+        self.has_left_spawn = True
+        self.return_start = True
+        self.energy = float(self._rng.uniform(1.5 * dist[r, c] + 20.0, self.max_energy))
+        for h in sorted(self.hotspots, key=lambda h: np.hypot(r - h[0], c - h[1]))[:2]:
+            self.sampled_mask[h] = 1.0
     
     def _compute_potential(self) -> float:
         d_home = np.hypot(self.agent_pos[0] - self.spawn[0], self.agent_pos[1] - self.spawn[1])
@@ -191,7 +212,7 @@ class SeafloorEDNAEnv(gym.Env):
             info["end_reason"] = "out_of_energy"
 
         # -- return to spawn (success condition) --
-        if not terminated and self.has_left_spawn and self.agent_pos == self.spawn and self.n_samples_taken > 0:
+        if not terminated and self.has_left_spawn and self.agent_pos == self.spawn and (self.n_samples_taken > 0 or self.return_start):
             terminated = True
 
             completion_bonus = 5 + 2.5 * self.n_samples_taken
@@ -297,6 +318,7 @@ class SeafloorEDNAEnv(gym.Env):
             "canisters": self.canisters,
             "samples_taken": self.n_samples_taken,
             "agent_pos": self.agent_pos,
+            "return_start": self.return_start,
         }
 
     def render(self):
