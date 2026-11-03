@@ -55,7 +55,7 @@ class SeafloorEDNAEnv(gym.Env):
 
         self.action_space = spaces.Discrete(9)
         self.observation_space = spaces.Dict({
-            "maps": spaces.Box(low=0.0, high=1.0, shape=(5, grid_size, grid_size), dtype=np.float32),
+            "maps": spaces.Box(low=0.0, high=1.0, shape=(6, grid_size, grid_size), dtype=np.float32),
             "scalars": spaces.Box(low=-1.0, high=2.0, shape=(5,), dtype=np.float32),
         })
 
@@ -135,6 +135,8 @@ class SeafloorEDNAEnv(gym.Env):
             self.elevation = elevation
             self.impassable = impassable
             self.spawn = spawn
+            rr, cc = np.mgrid[0:self.grid_size, 0:self.grid_size]
+            self.spawn_field = np.exp(-((rr - spawn[0]) ** 2 + (cc - spawn[1]) ** 2) / (2 * 12.0 ** 2)).astype(np.float32)
             self.hotspots = hotspots
             self.edna_field = edna_field
             self.vents = vents
@@ -192,7 +194,7 @@ class SeafloorEDNAEnv(gym.Env):
         if not terminated and self.has_left_spawn and self.agent_pos == self.spawn and self.n_samples_taken > 0:
             terminated = True
 
-            completion_bonus = 0.5 + 2.5 * self.n_samples_taken
+            completion_bonus = 5 + 2.5 * self.n_samples_taken
             reward += completion_bonus
             info["end_reason"] = "returned_to_spawn"
             info["samples_collected"] = self.n_samples_taken
@@ -270,6 +272,7 @@ class SeafloorEDNAEnv(gym.Env):
             self.vent_mask.astype(np.float32),
             self.predator_mask.astype(np.float32),
             self.sampled_mask,
+            self.spawn_field,
         ], axis=0).astype(np.float32)
         padded = np.pad(base, ((0, 0), (R, R), (R, R)))
         r, c = self.agent_pos
