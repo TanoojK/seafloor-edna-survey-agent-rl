@@ -287,21 +287,23 @@ class SeafloorEDNAEnv(gym.Env):
 
     def _get_obs(self):
         R = 24
+        r, c = self.agent_pos
+        d_home = np.hypot(r - self.spawn[0], c - self.spawn[1])
+        go_home = self.canisters <= 0 or (self.n_samples_taken > 0 and self.energy < 1.5 * d_home + 20.0)
+        home_ch = self.spawn_field if go_home else np.zeros_like(self.spawn_field)
+
         base = np.stack([
             self.elevation,
             self.edna_field,
             self.vent_mask.astype(np.float32),
             self.predator_mask.astype(np.float32),
             self.sampled_mask,
-            self.spawn_field,
+            home_ch,
         ], axis=0).astype(np.float32)
         padded = np.pad(base, ((0, 0), (R, R), (R, R)))
-        r, c = self.agent_pos
         maps = padded[:, r:r + 2 * R + 1, c:c + 2 * R + 1]
 
-        d_home = np.hypot(r - self.spawn[0], c - self.spawn[1])
         margin = (self.energy - 1.2 * d_home) / self.max_energy
-
         scalars = np.array([
             self.energy / self.max_energy,
             self.canisters / self.n_canisters_start,

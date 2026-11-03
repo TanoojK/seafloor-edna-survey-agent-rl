@@ -15,7 +15,7 @@ CHECKPOINT_DIR = "./checkpoints"
 LOG_EVERY_EPISODES = 100      # print a summary every N completed episodes (across all envs)
 
 GRID_SIZE = 50
-N_MAP_CHANNELS = 5             # elevation, eDNA field, vent mask, predator mask, sampled mask (agent-centered 49x49 window)
+N_MAP_CHANNELS = 6            # elevation, eDNA field, vent mask, predator mask, sampled mask (agent-centered 49x49 window)
 N_SCALARS = 5                  # energy, canisters, spawn offset row, spawn offset col, margin
   
 ENTROPY_COEF_START = 0.01
