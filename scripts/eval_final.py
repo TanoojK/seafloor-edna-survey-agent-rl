@@ -18,7 +18,7 @@ for ep in range(50):
         with torch.no_grad():
             dist, _ = agent.model.forward(torch.tensor(obs["maps"])[None], torch.tensor(obs["scalars"])[None],
                                           torch.tensor(env.get_action_mask())[None])
-        obs, r, term, trunc, info = env.step(int(dist.sample()))
+        obs, r, term, trunc, info = env.step(int(dist.probs.argmax()))
         total += r
         if term or trunc: break
     reasons[info.get("end_reason")] += 1; samples.append(info.get("samples_taken", 0)); rewards.append(total)

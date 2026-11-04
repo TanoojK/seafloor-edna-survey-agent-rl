@@ -8,9 +8,11 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from matplotlib.collections import LineCollection
 
+import environment
 from environment import SeafloorEDNAEnv
 from ppo import PPOAgent
 
+environment.RETURN_START_PROB = 0.0
 
 def parse_checkpoint_step(path):
     match = re.search(r"step(\d+)", os.path.basename(path))
@@ -26,6 +28,8 @@ def to_tensor(obs):
 def run_episode(env, agent=None, max_steps=500, deterministic=False, random_policy=False, seed=None):
 
     obs, info = env.reset(seed=seed)
+    env.canisters = 3
+    obs = env._get_obs()
 
     record = {
         "positions": [env.agent_pos],

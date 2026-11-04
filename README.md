@@ -39,9 +39,6 @@ See [`REWARDS.md`](./REWARDS.md) for the full, current reward function reference
   eDNA hotspots per episode (Gaussian concentration fields), thermal vents (instant
   death, placed with deliberate risk/reward proximity to hotspots), predator zones
   (probabilistic risk), and a limited energy budget that must cover the full round trip.
-
-  ![Environment preview](Images/example_env.png)
-
 - **Algorithm**: Proximal Policy Optimization (PPO), implemented from scratch in
   PyTorch — not a library — specifically to demonstrate understanding of the
   algorithm's actual mechanics (clipped surrogate objective, GAE, entropy
@@ -53,7 +50,7 @@ See [`REWARDS.md`](./REWARDS.md) for the full, current reward function reference
   structurally blocked via action masking, rather than left for the policy to
   hopefully learn to avoid through penalties alone.
 - **Curriculum learning**: hotspot distance from spawn starts close and widens over
-  training, with entropy decay and curriculum difficulty deliberately decoupled to![Environment preview](Images/environment.png)
+  training, with entropy decay and curriculum difficulty deliberately decoupled to
   avoid the forgetting failure mode above.
 
 ## Setup
@@ -81,6 +78,11 @@ Check how survivable the environment actually is, independent of any trained pol
 ```bash
 python diagnostics/test_survivability.py
 ```
+**Example run** (seed 20, evaluated with 3 canisters; chosen from 20 seeds tried because the agent collects all 3 samples and returns home. A typical episode collects about 1.8):
+
+![Example run](images/example_run.gif)
+
+![Example trajectory](images/example_trajectory.png)
 
 ## Status
 

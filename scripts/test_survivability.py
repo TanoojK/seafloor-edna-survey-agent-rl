@@ -2,8 +2,11 @@ import heapq
 import numpy as np
 import sys
 sys.path.insert(0, "/home/claude")
+import environment
 from environment import SeafloorEDNAEnv, CARDINAL_COST, DIAGONAL_COST, ELEVATION_FLAT_COST
 from terrain_generator import elevation_step_cost_flat
+
+environment.RETURN_START_PROB = 0.0
 
 DIRS = [(-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1)]
 IS_DIAGONAL = [False, True, False, True, False, True, False, True]
