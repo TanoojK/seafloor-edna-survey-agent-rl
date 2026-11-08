@@ -260,7 +260,7 @@ def main():
     if not args.random_policy:
         agent = PPOAgent(n_map_channels=6, n_scalars=5, n_actions=9, grid_size=49)
         if args.checkpoint:
-            agent.model.load_state_dict(torch.load(args.checkpoint, map_location=agent.device))
+            agent.model.load_state_dict(torch.load(args.checkpoint, map_location=agent.device,weights_only=True))
             agent.model.eval()
             print(f"Loaded checkpoint: {args.checkpoint}")
         else:

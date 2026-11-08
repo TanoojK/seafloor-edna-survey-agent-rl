@@ -28,6 +28,7 @@ IDLE_ENERGY_COST = 1.0
 VIEW_RADIUS = 24
 VIEW = 2 * VIEW_RADIUS + 1 
 RETURN_START_PROB = 0.3
+SAMPLE_RADIUS = 1   
 
 class SeafloorEDNAEnv(gym.Env):
     metadata = {"render_modes": ["rgb_array"]}
@@ -121,8 +122,14 @@ class SeafloorEDNAEnv(gym.Env):
         r, c = self.agent_pos
         for a, (dr, dc) in enumerate(DIRECTIONS):
             nr, nc = r + dr, c + dc
-            if 0 <= nr < self.grid_size and 0 <= nc < self.grid_size and self.vent_mask[nr, nc]:
+            if (not (0 <= nr < self.grid_size and 0 <= nc < self.grid_size)
+                    or self.impassable[nr, nc] or self.vent_mask[nr, nc]):
                 mask[a] = False
+        mask[8] = self.canisters > 0 and any(
+            self.sampled_mask[h] == 0 and max(abs(r - h[0]), abs(c - h[1])) <= SAMPLE_RADIUS
+            for h in self.hotspots)
+        if not mask.any():
+            mask[:] = True
         return mask
 
     def _compute_danger_potential(self, danger_radius: float = 6.0, scale: float = 0.15) -> float:
@@ -266,20 +273,21 @@ class SeafloorEDNAEnv(gym.Env):
         if self.agent_pos != self.spawn:
             self.has_left_spawn = True
 
-        return 0.0  # movement itself has no direct reward, only the energy cost (applied above)
+        return 0.0  
 
     def _handle_sample(self) -> float:
         r, c = self.agent_pos
-        # not standing on a hotspot cell -> sampling does nothing
-        is_hotspot_cell = any((r, c) == h for h in self.hotspots)
-        if not is_hotspot_cell or self.canisters <= 0:
+        if self.canisters <= 0:
             return 0.0
-
-        if self.sampled_mask[r, c] > 0:
-            return -1.0  # already sampled this exact cell 
-
+        near = [h for h in self.hotspots if max(abs(r - h[0]), abs(c - h[1])) <= SAMPLE_RADIUS]
+        if not near:
+            return 0.0
+        fresh = [h for h in near if self.sampled_mask[h] == 0]
+        if not fresh:
+            return -1.0  # only already-sampled hotspots in range
+        h = min(fresh, key=lambda h: max(abs(r - h[0]), abs(c - h[1])))
         concentration = float(self.edna_field[r, c])
-        self.sampled_mask[r, c] = 1.0
+        self.sampled_mask[h] = 1.0
         self.canisters -= 1
         self.n_samples_taken += 1
         return concentration * 10.0

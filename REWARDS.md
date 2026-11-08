@@ -8,15 +8,16 @@ This reflects the version that produced the results in the README. Things that c
 - the return bonus is `5 + 2.5 × samples` (was `0.5 + 2.5 × samples`)
 - the "go home" shaping target can switch on early when energy runs low, not only when canisters run out
 - 30% of training episodes start in the return phase (they are excluded from the logged statistics)
+- SAMPLE works within 1 tile of an unsampled hotspot (it used to require the exact cell), and the action mask now also blocks moves that do nothing and SAMPLE where it cannot succeed
 
 ## Reward terms
 
 | # | Event | Reward | When it fires |
 |---|---|---|---|
 | 1 | Per-step cost | **-0.04** | Every step. |
-| 2 | Successful sample | **`concentration × 10.0`** | Standing on an unsampled hotspot, pressing SAMPLE, with at least one canister left. `concentration` is the eDNA field value at that cell, normalised so the strongest hotspot is 1.0. |
-| 3 | Re-sampling a sampled hotspot | **-1.0** | SAMPLE on a hotspot that was already sampled. |
-| 4 | SAMPLE anywhere else, or with 0 canisters | **0.0** | No reward, but it is a non-moving step, so it still costs energy (see below). |
+| 2 | Successful sample | **`concentration × 10.0`** | Pressing SAMPLE within 1 tile (8-neighbourhood or the same cell) of an unsampled hotspot, with at least one canister left. `concentration` is the eDNA field value at the robot's own cell, normalised so the strongest hotspot is 1.0, so it is slightly lower one tile off the peak. The closest unsampled hotspot in range is the one marked as sampled. |
+| 3 | Re-sampling a sampled hotspot | **-1.0** | SAMPLE with only already-sampled hotspots in range. The mask normally prevents this (see below), so it only appears through the all-actions-allowed fallback. |
+| 4 | SAMPLE anywhere else, or with 0 canisters | **0.0** | No reward. Also normally masked out. A non-moving step still costs energy (see below). |
 | 5 | Hit a vent | **-20.0**, episode ends | Moving onto a vent cell. The action mask blocks this (see below), so it should not happen. A small number of vent endings (roughly 0-2% of logged training episodes) still appear; I haven't tracked down why. |
 | 6 | Predator attack | **-20.0**, episode ends | Inside a predator zone and the per-step attack roll (0.5%) comes up. Not masked on purpose: it is a probabilistic risk the agent can trade off. |
 | 7 | Out of energy | **-15.0**, episode ends | `energy <= 0`. |
@@ -32,7 +33,7 @@ Both shaping potentials are set to 0 at terminal and truncated steps, so the sha
 The tank starts at `max_energy = 300`.
 
 - **Moving:** cardinal step 1.0, diagonal step 1.5, plus a small elevation-based term (flat component 0.1). Measured on shortest safe paths, this came to about 1.1 energy per tile of straight-line distance.
-- **Not moving:** any step that leaves the agent where it is costs **1.0 energy**. That covers SAMPLE (including a successful one), bumping into impassable terrain and walking off the edge.
+- **Not moving:** any step that leaves the agent where it is costs **1.0 energy**. That covers SAMPLE (including a successful one), bumping into impassable terrain and walking off the edge. The mask now removes the pointless ones, but the cost still applies to a successful SAMPLE.
 - There is no other drain. The earlier version used a small drain on every step (0.1), which didn't stop the agent from parking and waiting for the timeout. Charging for idle steps closed that gap: an agent that stops moving now runs out of energy before the 500-step limit.
 
 ## What the shaping potentials measure
@@ -49,7 +50,15 @@ What is added to the reward each step is the *change* in these values, not a fix
 
 ## Action masking
 
-`get_action_mask()` returns a length-9 boolean array. Any of the 8 move actions that would step onto a vent cell is `False`; logits for masked actions are set to `-1e8` before the softmax. The mask is stored per step and replayed identically during the PPO update.
+`get_action_mask()` returns a length-9 boolean array. An action is `False` if:
+
+- it is a move onto a vent cell
+- it is a move off the map or into impassable terrain (a no-op that would only cost energy)
+- it is SAMPLE and the robot has no canister, or no unsampled hotspot is within 1 tile (`SAMPLE_RADIUS`)
+
+If every action would be masked, all actions are allowed (a safeguard for a boxed-in robot). Logits for masked actions are set to `-1e8` before the softmax, and the mask is stored per step and replayed identically during the PPO update.
+
+Why the extra masking: without it, a greedy policy could pick a move into a wall, or SAMPLE away from any hotspot, and repeat it forever, because the state never changed. The sampled policy escaped by chance. Masking those actions took the greedy policy from about 58% returns to about 92% on a 50-episode check, with no retraining. Offering SAMPLE only where it can succeed is a simplification, since a real sampler would not be told when it is in range.
 
 Evaluation code must pass the mask too. The policy never trains the logits of masked actions, so an evaluation without the mask walks into vents (this caused a spurious 35% vent rate in an early evaluation script).
 
@@ -75,3 +84,4 @@ Evaluation code must pass the mask too. The policy never trains the logits of ma
 - Parking should end in `out_of_energy` well before `max_steps`. If `max_steps` shows up in the logs again, idling is too cheap.
 - If vent endings climb in training logs despite masking, the mask is not being applied or replayed consistently somewhere.
 - Keep `gamma` in the environment and in the agent the same value, from one source.
+- With the mask in place, a greedy policy should not be able to repeat a no-op forever. If greedy evaluation episodes end in `out_of_energy` with the robot on a single cell, the mask is missing an action type.
