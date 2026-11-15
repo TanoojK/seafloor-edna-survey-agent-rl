@@ -6,8 +6,6 @@ from terrain_generator import generate_terrain, compute_impassable_terrain, elev
 from object_placement import place_spawn, place_edna_hotspots, generate_edna_field
 from hazards import place_vents, place_predator_zones, build_hazard_mask, hazard_type_at, roll_predator_attack
 
-
-# 8 movement directions as (d_row, d_col), index matches action id 0-7
 DIRECTIONS = [
     (-1, 0),   # 0: N
     (-1, 1),   # 1: NE
@@ -176,7 +174,7 @@ class SeafloorEDNAEnv(gym.Env):
             self.all_hazards = vents + predators
             return
 
-        raise RuntimeError("Failed to generate a valid episode after max_regen_attempts -- "
+        raise RuntimeError("Failed to generate a valid episode after max_regen_attempts"
                             "check placement constraints, they may be too strict for this grid size.")
 
 
@@ -184,7 +182,7 @@ class SeafloorEDNAEnv(gym.Env):
     def step(self, 
              action: int):
         self.step_count += 1
-        reward = -0.04  # small per-step cost, encourages efficiency
+        reward = -0.04  
         self.energy -= STEP_ENERGY_COST
         terminated = False
         truncated = False
@@ -200,7 +198,6 @@ class SeafloorEDNAEnv(gym.Env):
         if self.agent_pos == prev_pos:
             self.energy -= IDLE_ENERGY_COST
             
-        # -- hazard checks happen AFTER movement resolves, based on new position --
         hazard = hazard_type_at(self.agent_pos, self.all_hazards)
         if hazard == "vent":
             reward -= 20.0
@@ -212,13 +209,11 @@ class SeafloorEDNAEnv(gym.Env):
                 terminated = True
                 info["end_reason"] = "predator_attack"
 
-        # -- energy depletion --
         if not terminated and self.energy <= 0:
             terminated = True
             reward -= 15.0
             info["end_reason"] = "out_of_energy"
 
-        # -- return to spawn (success condition) --
         if not terminated and self.has_left_spawn and self.agent_pos == self.spawn and (self.n_samples_taken > 0 or self.return_start):
             terminated = True
 
@@ -227,13 +222,11 @@ class SeafloorEDNAEnv(gym.Env):
             info["end_reason"] = "returned_to_spawn"
             info["samples_collected"] = self.n_samples_taken
 
-# -- safety cutoff --
         if not terminated and self.step_count >= self.max_steps:
             truncated = True
             reward -= 20.0
             info["end_reason"] = "max_steps"
 
-        # -- potential-based distance shaping (dense signal toward nearest unsampled hotspot) --
         new_potential = 0.0 if (terminated or truncated) else self._compute_potential()
         reward += self.gamma * new_potential - self._prev_potential
         self._prev_potential = new_potential
@@ -253,13 +246,11 @@ class SeafloorEDNAEnv(gym.Env):
         new_row = self.agent_pos[0] + d_row
         new_col = self.agent_pos[1] + d_col
 
-        # out of bounds -> blocked, no-op, no extra cost
         if not (0 <= new_row < self.grid_size and 0 <= new_col < self.grid_size):
             return 0.0
 
         new_pos = (new_row, new_col)
 
-        # impassable terrain -> blocked, no-op, no extra cost (wasted a step, not punished further)
         if self.impassable[new_pos]:
             return 0.0
 

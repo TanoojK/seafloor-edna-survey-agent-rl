@@ -8,11 +8,11 @@ class CNNEncoder(nn.Module):
     def __init__(self, in_channels: int, grid_size: int = 50, out_dim: int = 128):
         super().__init__()
         self.conv = nn.Sequential(
-            nn.Conv2d(in_channels, 16, kernel_size=5, stride=2, padding=2),  # 50x50 -> 25x25
+            nn.Conv2d(in_channels, 16, kernel_size=5, stride=2, padding=2),
             nn.ReLU(),
-            nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1),           # 25x25 -> 13x13
+            nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1),
             nn.ReLU(),
-            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),           # 13x13 -> 7x7
+            nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1),
             nn.ReLU(),
         )
         with torch.no_grad():
@@ -44,9 +44,6 @@ class ActorCritic(nn.Module):
         self.critic_head = nn.Linear(hidden_dim, 1)
 
     def forward(self, maps: torch.Tensor, scalars: torch.Tensor, action_mask: torch.Tensor = None):
-        """Returns action distribution and state value estimate.
-        action_mask (optional): (B, n_actions) bool, True=allowed. Masked-out
-        actions get -inf logits so Categorical assigns them ~0 probability."""
         actor_features = self.actor_trunk(torch.cat([self.actor_encoder(maps), self.actor_scalar(scalars)], dim=-1))
         critic_features = self.critic_trunk(torch.cat([self.critic_encoder(maps), self.critic_scalar(scalars)], dim=-1))
 
@@ -58,7 +55,6 @@ class ActorCritic(nn.Module):
         return dist, value.squeeze(-1)
 
     def act(self, maps: torch.Tensor, scalars: torch.Tensor, action_mask: torch.Tensor = None):
-        """Sample an action for environment interaction. Returns action, log_prob, value."""
         dist, value = self.forward(maps, scalars, action_mask)
         action = dist.sample()
         log_prob = dist.log_prob(action)

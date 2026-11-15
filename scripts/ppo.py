@@ -41,7 +41,6 @@ class PPOAgent:
 
     @torch.no_grad()
     def _bootstrap_value(self, last_maps, last_scalars, last_done):
-        """Value estimate for the state after the final stored transition (0 if episode ended)."""
         if last_done:
             return 0.0
         maps_b = last_maps.unsqueeze(0).to(self.device)

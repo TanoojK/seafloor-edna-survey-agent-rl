@@ -1,7 +1,6 @@
 import heapq
 import numpy as np
 import sys
-sys.path.insert(0, "/home/claude")
 import environment
 from environment import SeafloorEDNAEnv, CARDINAL_COST, DIAGONAL_COST, ELEVATION_FLAT_COST
 from terrain_generator import elevation_step_cost_flat
@@ -19,9 +18,8 @@ def dijkstra_next_step(start, target, blocked, elevation):
     grid_size = blocked.shape[0]
     best_cost = {start: 0.0}
     first_move = {}
-    # min-heap of (cost_so_far, tie_breaker, position)
     heap = [(0.0, 0, start)]
-    counter = 1  # tie-breaker so the heap never tries to compare tuples directly
+    counter = 1  
 
     while heap:
         cost, _, cur = heapq.heappop(heap)
@@ -63,8 +61,6 @@ def direct_path_action(env):
     blocked = env.impassable | env.vent_mask
     move = dijkstra_next_step((ar, ac), target, blocked, env.elevation)
     if move is None:
-        # hotspot unreachable without crossing a vent (rare, given clearance
-        # buffer) -- fall back to allowing vent cells rather than idling forever
         move = dijkstra_next_step((ar, ac), target, env.impassable, env.elevation)
         if move is None:
             return 8

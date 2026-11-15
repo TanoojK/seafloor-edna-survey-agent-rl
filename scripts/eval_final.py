@@ -1,9 +1,10 @@
 import sys, numpy as np, torch
 from collections import Counter
 import environment
-environment.RETURN_START_PROB = 0.0
 from environment import SeafloorEDNAEnv
 from ppo import PPOAgent
+
+environment.RETURN_START_PROB = 0.0
 
 agent = PPOAgent(n_map_channels=6, n_scalars=5, n_actions=9, grid_size=49, device=torch.device("cpu"))
 agent.model.load_state_dict(torch.load(sys.argv[1], map_location="cpu",weights_only=True))

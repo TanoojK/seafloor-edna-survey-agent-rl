@@ -1,21 +1,6 @@
-"""
-Hazard system for the environment.
-
-Two hazard types:
-
-    - "Thermal vents": placed near a random subset of eDNA hotspots (risk-reward tension --
-      high-value sampling areas are sometimes near genuine danger). Stepping onto
-      a vent cell ends episode immediately.
-
-    - "Predator zones": placed independently of hotspots, in small radius zones.
-      Each step spent standing in a predator zone has a small (default 0.5%)
-      chance of triggering an attack -> episode ends immediately. Risk compounds
-      the longer the agent lingers, but a quick pass-through is comparatively safe.
-"""
-
 import numpy as np
 
-DEFAULT_PREDATOR_ATTACK_PROB = 0.005  # 0.5% per step spent inside a predator zone
+DEFAULT_PREDATOR_ATTACK_PROB = 0.005  
 
 def _generate_blob_mask(
     grid_size: int,
@@ -24,7 +9,7 @@ def _generate_blob_mask(
     irregularity: float = 0.4,
     n_harmonics: int = 3,
     rng=None,
-) -> np.ndarray: #Generates an irregular blob-shaped boolean mask 
+) -> np.ndarray:  
     rng = rng or np.random.default_rng()
     cr, cc = center
 
@@ -42,7 +27,7 @@ def _generate_blob_mask(
     for k, (amp, phase) in enumerate(zip(amplitudes, phases), start=1):
         boundary_radius += amp * np.sin(k * theta + phase)
 
-    boundary_radius = np.clip(boundary_radius, base_radius * 0.4, None)  # avoid degenerate near-zero spots
+    boundary_radius = np.clip(boundary_radius, base_radius * 0.4, None)  
     return dist <= boundary_radius
 
 
@@ -56,16 +41,7 @@ def place_vents(
     max_attempts: int = 100,
     rng=None,
 ) -> list[dict]:
-    """Places vents near a random subset of hotspots (offset by a random distance).
-
-    `min_hotspot_clearance` enforces a hard safety buffer: the vent's irregular
-    blob mask is never allowed to reach within this many tiles of the hotspot
-    cell itself. Without this, the offset distance and the blob's random
-    irregularity (which can push its radius well past its nominal `radius`)
-    would sometimes overlap the hotspot's only sane approach path, making
-    high-value hotspots effectively unreachable without near-certain death --
-    that's "danger nearby", not "danger you can route around".
-    """
+    
     rng = rng or np.random.default_rng()
     grid_size = impassable_mask.shape[0]
 
@@ -90,7 +66,6 @@ def place_vents(
 
             mask = _generate_blob_mask(grid_size, (vr, vc), radius, irregularity=0.4, rng=rng)
 
-            # hard safety buffer -- reject if the blob reaches too close to the hotspot
             rows, cols = np.nonzero(mask)
             if len(rows) > 0:
                 dists_to_hotspot = np.hypot(rows - hr, cols - hc)
@@ -102,7 +77,7 @@ def place_vents(
             break
 
         if not placed:
-            continue  # skip this vent, don't hold up the whole generation pipeline
+            continue  
 
     return vents
 
@@ -123,7 +98,6 @@ def place_predator_zones(
     grid_size = impassable_mask.shape[0]
     zones = []
 
-    #restrict zone centers to the middle 80% of the grid
     margin = int(grid_size * edge_margin)
     low, high = margin, grid_size - margin
 

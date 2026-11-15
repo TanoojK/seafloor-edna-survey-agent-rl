@@ -1,4 +1,3 @@
-#Placement logic for spawn point and eDNA hotspots.
 import numpy as np
 
 def place_spawn(impassable_mask: np.ndarray,
@@ -55,7 +54,7 @@ def place_edna_hotspots(
             break
 
         if not placed:
-            return None  # couldn't satisfy constraints -- caller regenerates
+            return None  
 
     return hotspots
 

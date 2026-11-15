@@ -5,19 +5,17 @@ import numpy as np
 
 # Config 
 
-N_ENVS = 8                     # parallel environments 
-TOTAL_TIMESTEPS = 500_000      # per-environment; total env-steps collected
-                                # across all workers is N_ENVS times this
-ROLLOUT_LENGTH = 2048          # steps PER ENVIRONMENT collected before each PPo update
+N_ENVS = 8                     
+TOTAL_TIMESTEPS = 500_000      
+ROLLOUT_LENGTH = 2048          
 
 CHECKPOINT_EVERY = 100_000      
 CHECKPOINT_DIR = "./checkpoints"
-LOG_EVERY_EPISODES = 100      # print a summary every N completed episodes (across all envs)
-
+LOG_EVERY_EPISODES = 100      
 GRID_SIZE = 50
-N_MAP_CHANNELS = 6            # elevation, eDNA field, vent mask, predator mask, sampled mask (agent-centered 49x49 window)
-N_SCALARS = 5                  # energy, canisters, spawn offset row, spawn offset col, margin
-  
+N_MAP_CHANNELS = 6            
+N_SCALARS = 5                  
+
 ENTROPY_COEF_START = 0.01
 ENTROPY_COEF_END = 0.001      
 LR_START = 3e-4
@@ -161,18 +159,15 @@ def train(fast_test: bool = False):
             progress = min(timesteps_done / total_timesteps, 1.0)
             agent.entropy_coef = ENTROPY_COEF_START + (ENTROPY_COEF_END - ENTROPY_COEF_START) * progress
 
-            # LR annealing, same reasoning: decays over the FULL run, independent of curriculum.
             current_lr = LR_START + (LR_END - LR_START) * progress
             for param_group in agent.optimizer.param_groups:
                 param_group["lr"] = current_lr
 
-            # ---- PPO update using everything collected this rollout, across all N_ENVS ---- #
             update_stats = agent.update_multi(maps_t, scalars_t, last_dones)
             print(f"    [update] entropy={update_stats['entropy']:.4f} "
                   f"value_loss={update_stats['value_loss']:.4f} "
                   f"policy_loss={update_stats['policy_loss']:.4f}")
 
-            # ---- persist metrics ---- #
             recent = episode_rewards_log[-LOG_EVERY_EPISODES:] if episode_rewards_log else [0.0]
             recent_samples = episode_samples_log[-LOG_EVERY_EPISODES:] if episode_samples_log else [0.0]
             avg_samples_now = float(np.mean(recent_samples))
@@ -185,7 +180,6 @@ def train(fast_test: bool = False):
                         f"{update_stats['value_loss']:.4f},{update_stats['policy_loss']:.4f},"
                         f"{current_lr:.6f},{time.time() - start_time:.1f}\n")
 
-            # ---- auto-stop if stuck ---- #
             recent_window = samples_history[-10:]
             recent_avg = sum(recent_window) / len(recent_window)
             if (baseline_samples is not None and timesteps_done >= stuck_check_after
@@ -200,18 +194,16 @@ def train(fast_test: bool = False):
                 _plot_rewards(episode_rewards_log, checkpoint_dir)
                 return
 
-            # ---- periodic checkpoint ---- #
             if timesteps_done % CHECKPOINT_EVERY < ROLLOUT_LENGTH:
                 ckpt_path = os.path.join(checkpoint_dir, f"ppo_step{timesteps_done}.pt")
                 torch.save(agent.model.state_dict(), ckpt_path)
                 print(f"  saved checkpoint: {ckpt_path}")
 
-        # final checkpoint + reward curve
         torch.save(agent.model.state_dict(), os.path.join(checkpoint_dir, f"ppo_step{timesteps_done}_final.pt"))
         _plot_rewards(episode_rewards_log, checkpoint_dir)
         print("Training complete.")
     finally:
-        vec_env.close()  # always clean up worker processes, even if something above crashes
+        vec_env.close() 
 
 
 def _summarize_reasons(reasons: list[str]) -> str:
@@ -242,8 +234,6 @@ def _plot_rewards(rewards: list[float], checkpoint_dir: str):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--fast-test", action="store_true",
-                         help="Run a small/fast proxy training run instead of the full one, "
-                              "to quickly check whether a change helps before committing to "
-                              "a full run. See FAST_TEST_* constants to tune size/length.")
+                         help="Run a small/fast proxy training run instead of the full one")
     args = parser.parse_args()
     train(fast_test=args.fast_test)

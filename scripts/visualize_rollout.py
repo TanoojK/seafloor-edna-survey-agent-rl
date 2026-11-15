@@ -18,9 +18,6 @@ def parse_checkpoint_step(path):
     match = re.search(r"step(\d+)", os.path.basename(path))
     return int(match.group(1)) if match else None
 
-
-# Rollout collection
-
 def to_tensor(obs):
     return torch.from_numpy(obs["maps"]), torch.from_numpy(obs["scalars"])
 
@@ -79,12 +76,9 @@ def run_episode(env, agent=None, max_steps=500, deterministic=False, random_poli
             break
 
     if record["end_reason"] is None:
-        record["end_reason"] = "did_not_terminate"  # ran max_steps in this script without hitting env's own cutoff
+        record["end_reason"] = "did_not_terminate"  
 
     return record
-
-
-# Static background (terrain + hazards + hotspots), shared by both outputs
 
 def draw_background(ax, rec):
     grid_size = rec["grid_size"]

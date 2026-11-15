@@ -51,9 +51,7 @@ class SubprocVecEnv:
         self.n_envs = n_envs
         self.grid_size = grid_size
 
-        ctx = mp.get_context("spawn")  # explicit -- matches Windows' only option,
-                                        # tested against on Linux too so nothing
-                                        # Windows-specific slips through untested
+        ctx = mp.get_context("spawn") 
         self.remotes, worker_remotes = zip(*[ctx.Pipe() for _ in range(n_envs)])
         self.processes = []
         for worker_remote in worker_remotes:
