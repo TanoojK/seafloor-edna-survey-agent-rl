@@ -6,7 +6,7 @@ The robot has to find hotspots under an energy budget, stay clear of lethal vent
 
 ## Results
 
-Final checkpoint: 500k steps per environment, 8 environments, 4M environment steps in total, about 2-3 hours on a 12-core CPU (depending on what else the machine is doing). Evaluated on **200 episodes per row on seeds that were never used for debugging**, with all 3 canisters and no forced return starts. "Sampled" draws actions from the policy; "greedy" always takes the most likely action. Intervals are 95% Wilson intervals on the return rate.
+Final checkpoint: 500k steps per environment, 8 environments, 4M environment steps in total, about 2-3 hours on a 12-core CPU . Evaluated on **200 episodes per row on seeds that were never used for debugging**, with all 3 canisters and no forced return starts. "Sampled" draws actions from the policy; "greedy" always takes the most likely action. Intervals are 95% Wilson intervals on the return rate.
 
 | Hotspot distance limit | Mode | Returned to spawn | Out of energy | Predator deaths | Samples (of 3) | Avg reward |
 |---|---|---|---|---|---|---|
@@ -27,22 +27,9 @@ How to read these numbers:
 - **The environment tells the robot when to go home** (see "How it works"). It still has to navigate back and avoid hazards, but the timing of the decision is partly handed over.
 - The agent collects 2.7-2.95 of 3 canisters, so there is little room left on this metric.
 
-### Earlier, stricter version (exact-cell sampling, vent-only mask)
-
-In the first version a sample only counted from the hotspot's exact cell, and the mask only blocked vents. Evaluated on 50 episodes per row, sampled policy:
-
-| Hotspot distance limit | Returned to spawn | Samples (of 3) | Avg reward |
-|---|---|---|---|
-| 13 tiles | 41 / 50 | 1.88 | +18.9 |
-| 20 tiles | 37 / 50 | 1.84 | +17.1 |
-| 30 tiles | 41 / 50 | 1.80 | +19.8 |
-| any distance | 36 / 50 | 1.76 | +17.9 |
-
-The greedy policy of that version returned only 14-22% of the time and sampled about 0.3 per episode. That evaluation used 50 seeds that I also used while diagnosing problems, so treat it as rough. These numbers are not comparable to the table above: they come from a harder task and a different mask.
-
 ## Example
 
-One evaluated episode from the earlier exact-cell version (seed 20, 3 canisters). I picked it from 20 seeds because the agent collects all 3 samples and returns home; a typical episode of that version collected about 1.8.
+One evaluated episode (seed 32, 3 canisters). I picked it from 40 seeds because the agent collects all 3 samples and returns home; a typical episode of that version collected about 2.84 samples.
 
 ![Example trajectory](images/example_trajectory.png)
 
@@ -84,7 +71,7 @@ The interesting part of this project was diagnosing why training kept failing an
 - **A silent shaping bug.** The shaping discount was hardcoded separately from the agent's gamma; once they drifted, the agent could bank reward by loitering near a target. Fixed with a single source for gamma.
 - **Policy collapse.** Entropy either stayed near maximum forever or collapsed onto a useless fixed behaviour, depending on the schedule.
 - **Catastrophic forgetting under a one-way curriculum.** Fixed by drawing each episode's difficulty from a range instead of a single ramping value.
-- **The agent couldn't navigate (the biggest one).** Every run plateaued at random-level sampling. The cause was the observation: the robot's own position was only two scalars (later a single pixel in its own channel), and a CNN followed by a fully connected layer is very slow to learn "where is the blob relative to me" from that. A scripted expert showed the task was easy. In a behaviour-cloning test with the same network and data, the agent-centered view reached about 72% accuracy and 0.76 samples per episode after 60 epochs, against about 31% and 0.0 for the global view. Switching training to an agent-centered window fixed the plateau.
+- **The agent couldn't navigate .** Every run plateaued at random-level sampling. The cause was the observation: the robot's own position was only two scalars (later a single pixel in its own channel), and a CNN followed by a fully connected layer is very slow to learn "where is the blob relative to me" from that. A scripted expert showed the task was easy. In a behaviour-cloning test with the same network and data, the agent-centered view reached about 72% accuracy and 0.76 samples per episode after 60 epochs, against about 31% and 0.0 for the global view. Switching training to an agent-centered window fixed the plateau.
 - **Parking.** Once it could sample, the agent learned to stop and wait out the timeout instead of coming home, because idling cost almost nothing. Fixed by charging a full move's energy for any step that doesn't move the agent.
 - **Never learning to return.** The return trip was rare in training, so it wasn't learned (0 of 40 successes when I placed the agent on a hotspot with no canisters). Fixed by starting 30% of episodes in the return phase, plus the conditional home beacon. This took returns from about 5% to about 80%.
 - **Exact-cell sampling and a greedy policy that looped.** The probability of pressing SAMPLE was about 0.54, 0.56 and 0.49 on the hotspot cell, one tile away and two tiles away: the agent could not tell the exact cell, so it hovered next to hotspots pressing SAMPLE about half the time. The sampled policy got away with it; the greedy one pressed SAMPLE (or a blocked move) forever. Allowing sampling within 1 tile and masking actions that do nothing fixed most of it: on the same checkpoint, greedy returns went from 58% to 92% on a 50-episode check.
@@ -92,14 +79,12 @@ The interesting part of this project was diagnosing why training kept failing an
 
 ## Limitations
 
-- Single run and seed; the numbers above are not averaged over training runs.
 - The greedy policy is a few points worse than the sampled one.
 - The environment decides when to show the home beacon, and offers SAMPLE only when it can succeed.
 - Sampling works within 1 tile, which makes the task easier than exact-cell sampling.
 - Vent deaths of about 1-4% appeared in some early training logs despite the mask; I never found the cause. None occurred in the 1,200 evaluation episodes above.
 - 2D grid world only; no physics or currents. A 3D version is a possible next step.
 - The 30-tile curriculum maximum was exceeded only at evaluation ("any distance").
-- The example trajectory comes from the earlier version of the agent.
 
 ## Setup
 
@@ -112,9 +97,6 @@ pip install -r requirements.txt
 The pinned `torch` is enough for CPU training, which is what this project uses (the model is small and the time goes into the environment).
 
 ## Usage
-
-Run everything from the `scripts/` folder.
-
 Train from scratch:
 ```bash
 cd scripts

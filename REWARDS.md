@@ -80,7 +80,7 @@ Evaluation code must pass the mask too. The policy never trains the logits of ma
 
 ## Sanity checks to re-run after any reward change
 
-- A do-nothing round trip should score much less than a real sampling run (the return rule requires a sample for this reason).
+- A round trip that does nothing should score much less than a real sampling run (the return rule requires a sample for this reason).
 - Parking should end in `out_of_energy` well before `max_steps`. If `max_steps` shows up in the logs again, idling is too cheap.
 - If vent endings climb in training logs despite masking, the mask is not being applied or replayed consistently somewhere.
 - Keep `gamma` in the environment and in the agent the same value, from one source.
